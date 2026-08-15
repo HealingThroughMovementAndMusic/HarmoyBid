@@ -11,9 +11,13 @@ export interface Niche {
   wage: number;
 }
 
-// TODO: replace default rate/comm/wage per niche with the real values from the
-// original Base44 NicheSelector.jsx once available.
-const NICHES: Niche[] = [
+// b2c/b2b rate+comm are sourced from Operational_Pricing_Report.pdf (Table A:
+// client/venue billing rates) and the original pricing spreadsheet — see
+// CLAUDE.md. `clinic` remains an unverified placeholder; no matching table
+// was found in the source material for it yet. `wage` isn't sourced per-niche
+// from the report — Table B tiers wage by who supplies equipment, an
+// independent axis not modeled here yet.
+export const NICHES: Niche[] = [
   {
     id: 'b2c',
     label: 'B2C / פרטי',
@@ -28,8 +32,8 @@ const NICHES: Niche[] = [
     label: 'B2B ספק',
     sub: 'שעת מטפל - ספק מול מתחם',
     icon: Building2,
-    rate: 480,
-    comm: 15,
+    rate: 240,
+    comm: 25,
     wage: 2.0,
   },
   {

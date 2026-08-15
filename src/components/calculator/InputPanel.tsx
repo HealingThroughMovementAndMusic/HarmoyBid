@@ -1,10 +1,12 @@
+import { z } from 'zod';
+import BigNumber from 'bignumber.js';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { cn } from '@/lib/utils';
+import { cn, coerceValidatedNumber } from '@/lib/utils';
 import { UserCheck, Clock, Users, Car, Percent, ShieldCheck, User } from 'lucide-react';
 import NicheSelector, { type Niche } from './NicheSelector';
-import type { CalcParams } from '@/lib/calcEngine';
+import { CalcParamsSchema, type CalcParams } from '@/lib/calcEngine';
 
 interface InputPanelProps {
   params: CalcParams;
@@ -76,14 +78,14 @@ export default function InputPanel({ params, onParamChange, onNicheChange }: Inp
           label="מספר מטפלים"
           icon={<UserCheck className="w-4 h-4" />}
           value={params.therapists}
-          onChange={(v) => onParamChange({ therapists: parseInt(v) || 1 })}
+          onChange={(v) => onParamChange({ therapists: coerceValidatedNumber(CalcParamsSchema.shape.therapists, v, params.therapists) })}
           min={1}
         />
         <InputField
           label="שעות הפעילות"
           icon={<Clock className="w-4 h-4" />}
           value={params.hours}
-          onChange={(v) => onParamChange({ hours: parseFloat(v) || 1 })}
+          onChange={(v) => onParamChange({ hours: coerceValidatedNumber(CalcParamsSchema.shape.hours, v, params.hours) })}
           min={1}
         />
         <div className="col-span-2">
@@ -91,7 +93,7 @@ export default function InputPanel({ params, onParamChange, onNicheChange }: Inp
             label="כמות משתתפים כוללת"
             icon={<Users className="w-4 h-4" />}
             value={params.participants}
-            onChange={(v) => onParamChange({ participants: parseInt(v) || 1 })}
+            onChange={(v) => onParamChange({ participants: coerceValidatedNumber(CalcParamsSchema.shape.participants, v, params.participants) })}
             min={1}
           />
         </div>
@@ -99,15 +101,20 @@ export default function InputPanel({ params, onParamChange, onNicheChange }: Inp
           label="תעריף שעתי (גבייה)"
           icon={<span className="text-xs font-bold">₪</span>}
           value={params.ratePerHour}
-          onChange={(v) => onParamChange({ ratePerHour: parseFloat(v) || 0 })}
+          onChange={(v) => onParamChange({ ratePerHour: coerceValidatedNumber(CalcParamsSchema.shape.ratePerHour, v, params.ratePerHour) })}
         />
         <InputField
           label={wageMode === 'min' ? 'שכר מטפל (לדקה)' : 'שכר מטפל (לשעה)'}
           icon={<span className="text-xs font-bold">₪</span>}
-          value={wageMode === 'min' ? params.wagePerMinute : (params.wagePerMinute * 60)}
+          value={wageMode === 'min' ? params.wagePerMinute : new BigNumber(params.wagePerMinute).times(60).toNumber()}
           onChange={(v) => {
-            const val = parseFloat(v) || 0;
-            onParamChange({ wagePerMinute: wageMode === 'min' ? val : val / 60 });
+            // Displayed value is per-hour in "hr" mode — convert to the
+            // canonical per-minute unit before validating against the schema.
+            const coerced = z.coerce.number().safeParse(v);
+            if (!coerced.success) return;
+            const perMinute = wageMode === 'min' ? coerced.data : coerced.data / 60;
+            const validated = CalcParamsSchema.shape.wagePerMinute.safeParse(perMinute);
+            if (validated.success) onParamChange({ wagePerMinute: validated.data });
           }}
           step={wageMode === 'min' ? 0.1 : 5}
         />
@@ -115,25 +122,16 @@ export default function InputPanel({ params, onParamChange, onNicheChange }: Inp
           label='מרחק נסיעה (ק"מ)'
           icon={<Car className="w-4 h-4" />}
           value={params.travelKm}
-          onChange={(v) => onParamChange({ travelKm: parseFloat(v) || 0 })}
+          onChange={(v) => onParamChange({ travelKm: coerceValidatedNumber(CalcParamsSchema.shape.travelKm, v, params.travelKm) })}
         />
         <InputField
           label="עמלת מתחם (%)"
           icon={<Percent className="w-4 h-4" />}
           value={params.commissionPct}
-          onChange={(v) => onParamChange({ commissionPct: parseFloat(v) || 0 })}
+          onChange={(v) => onParamChange({ commissionPct: coerceValidatedNumber(CalcParamsSchema.shape.commissionPct, v, params.commissionPct) })}
           min={0}
           max={100}
         />
-        <div className="col-span-2">
-          <InputField
-            label="אורך משמרת — לצורך הבטחת הכנסה (שעות)"
-            icon={<Clock className="w-4 h-4" />}
-            value={params.shiftHours ?? 6}
-            onChange={(v) => onParamChange({ shiftHours: parseFloat(v) || 6 })}
-            min={1}
-          />
-        </div>
       </div>
 
       <div className="flex justify-between items-center bg-secondary p-3 sm:p-4 rounded-xl border border-border mt-4 gap-3">
@@ -141,6 +139,17 @@ export default function InputPanel({ params, onParamChange, onNicheChange }: Inp
         <Switch
           checked={params.isOwnerTreating}
           onCheckedChange={(v) => onParamChange({ isOwnerTreating: v })}
+        />
+      </div>
+
+      <div className="flex justify-between items-center bg-secondary p-3 sm:p-4 rounded-xl border border-border mt-3 gap-3">
+        <div className="flex items-center gap-2">
+          <Car className="w-4 h-4 text-primary" />
+          <span className="text-sm font-semibold leading-snug">הגעה ברכב אחד (איחוד נסיעות)</span>
+        </div>
+        <Switch
+          checked={params.oneCarArrival ?? false}
+          onCheckedChange={(v) => onParamChange({ oneCarArrival: v })}
         />
       </div>
 
@@ -157,20 +166,13 @@ export default function InputPanel({ params, onParamChange, onNicheChange }: Inp
       </div>
 
       {params.incomeGuarantee && (
-        <div className="grid grid-cols-2 gap-4 mt-3 p-3 bg-primary/5 border border-dashed border-primary/40 rounded-xl">
-          <div className="col-span-2 text-xs text-primary font-bold mb-1">מינימום מובטח למטפל:</div>
+        <div className="grid grid-cols-1 gap-4 mt-3 p-3 bg-primary/5 border border-dashed border-primary/40 rounded-xl">
+          <div className="text-xs text-primary font-bold mb-1">מינימום מובטח למטפל:</div>
           <InputField
-            label="מינימום לעד 3 שעות (₪)"
+            label="תעריף שעתי מובטח (₪) — לאירועים עד 4 שעות"
             icon={<span className="text-xs font-bold">₪</span>}
             value={params.guaranteeMin3h ?? 150}
-            onChange={(v) => onParamChange({ guaranteeMin3h: parseFloat(v) || 0 })}
-            min={0}
-          />
-          <InputField
-            label="מינימום למשמרת מלאה (₪)"
-            icon={<span className="text-xs font-bold">₪</span>}
-            value={params.guaranteeMinShift ?? 300}
-            onChange={(v) => onParamChange({ guaranteeMinShift: parseFloat(v) || 0 })}
+            onChange={(v) => onParamChange({ guaranteeMin3h: coerceValidatedNumber(CalcParamsSchema.shape.guaranteeMin3h, v, params.guaranteeMin3h ?? 150) })}
             min={0}
           />
         </div>

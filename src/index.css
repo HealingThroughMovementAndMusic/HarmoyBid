@@ -6,36 +6,40 @@
 
 @layer base {
   :root {
+    /* Light theme — warm off-white background, white cards, the same
+       brand hues (emerald primary / amber accent) with lightness/contrast
+       re-tuned for a light surface rather than a dark one. */
+    color-scheme: light;
     --font-heebo: 'Heebo', sans-serif;
     --radius: 0.75rem;
 
-    --background: 222 47% 5%;
-    --foreground: 210 40% 98%;
+    --background: 40 33% 98%;
+    --foreground: 222 47% 11%;
 
-    --card: 222 40% 8%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
 
-    --popover: 222 40% 8%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 160 84% 39%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 160 84% 32%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 217 33% 12%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 160 20% 95%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 217 33% 14%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 210 20% 95%;
+    --muted-foreground: 215 15% 40%;
 
-    --accent: 38 92% 50%;
-    --accent-foreground: 222 47% 5%;
+    --accent: 38 92% 45%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 63% 31%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 215 25% 20%;
-    --input: 215 25% 20%;
-    --ring: 160 84% 39%;
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 160 84% 32%;
 
     --chart-1: 160 84% 39%;
     --chart-2: 217 91% 60%;
@@ -43,14 +47,86 @@
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
 
-    --sidebar-background: 222 47% 5%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 160 84% 39%;
-    --sidebar-primary-foreground: 210 40% 98%;
-    --sidebar-accent: 217 33% 12%;
-    --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 215 25% 20%;
-    --sidebar-ring: 160 84% 39%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 160 84% 32%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 160 20% 95%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 220 15% 88%;
+    --sidebar-ring: 160 84% 32%;
+  }
+
+  .dark {
+    /* Dark theme — "Rationed Voltage Dark" (near-black canvas, single yellow
+       accent, borders-not-shadows). Scoped entirely to this .dark block —
+       :root (light theme) is never touched by this token set. Every value
+       below is a deliberate hsl() triplet derived from the source system's
+       hex palette; --card/--popover and --destructive intentionally deviate
+       from a literal hex→HSL conversion (see CLAUDE.md design-system notes
+       for the reasoning: literal values collapse background/card into the
+       same lightness, and literal destructive-red-on-white text fails WCAG
+       AA contrast). --primary and --accent stay two distinct yellows
+       (not merged into one) because --accent is this app's real
+       hover/selected-state color throughout the dropdown/command/button
+       system — merging them would make "hovered" and "selected"
+       indistinguishable. */
+    /* Without this, native form controls (this app's treatment <select>
+       among them) render their popup with the OS's default LIGHT scheme
+       regardless of this dark theme — white dropdown background, but the
+       <option> text still inherits this app's white --foreground, so the
+       options are literally white-on-white and invisible. This one
+       property fixes every native control at once (select popups,
+       checkboxes, date pickers, scrollbars), not just this instance. */
+    color-scheme: dark;
+    --radius: 0.5rem;
+
+    --background: 0 0% 9%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 62 100% 71%;
+    --primary-foreground: 0 0% 8%;
+
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 66 100% 69%;
+    --accent-foreground: 0 0% 8%;
+
+    --destructive: 357 96% 45%;
+    --destructive-foreground: 0 0% 98%;
+
+    --warning: 30 100% 44%;
+    --warning-foreground: 0 0% 98%;
+
+    --border: 0 0% 25%;
+    --border-accent: 61 97% 16%;
+    --input: 0 0% 25%;
+    --ring: 62 100% 71%;
+
+    --chart-1: 62 100% 71%;
+    --chart-2: 217 91% 60%;
+    --chart-3: 190 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+
+    --sidebar-background: 0 0% 9%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 62 100% 71%;
+    --sidebar-primary-foreground: 0 0% 8%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 25%;
+    --sidebar-ring: 62 100% 71%;
   }
 }
 
@@ -63,4 +139,116 @@
     font-family: var(--font-heebo);
     margin: 0;
   }
+}
+
+/* "Rationed Voltage Dark" type scale, mapped to existing Tailwind utilities
+   (no new CSS — Heebo renders all of these for real Hebrew content in both
+   themes, per CLAUDE.md; `font-display`/`font-mono` only apply where
+   content is genuinely Latin/numeric):
+     96px/600 -> text-8xl font-semibold   (display, rare — hero numbers only)
+     36px/600 -> text-4xl font-semibold   (section headline)
+     20px/700 -> text-xl font-bold        (card title / UI label)
+     24px/400 -> text-2xl                 (lead copy)
+     16px/400 -> text-base                (dense body / default) */
+
+/* Thin, theme-colored scrollbar — replaces the native OS/browser scrollbar
+   wherever `.harmony-scroll` is applied (the sidebar nav list is the
+   primary case; the native scrollbar was especially bad in the collapsed
+   w-16 rail, where it ate a large fraction of the available width). */
+.harmony-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+.harmony-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.harmony-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.harmony-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 999px;
+}
+.harmony-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--muted-foreground));
+}
+
+/* react-big-calendar restyle to the house design system (Design Spec Phase
+   2, C5 / Roadmap Phase 1 item 3) — CSS override only, the library itself
+   is unchanged. Scoped to .harmony-rbc so it never leaks into other pages. */
+.harmony-rbc .rbc-calendar {
+  font-family: var(--font-heebo);
+  color: hsl(var(--foreground));
+}
+.harmony-rbc .rbc-off-range-bg {
+  background: hsl(var(--secondary) / 0.4);
+}
+.harmony-rbc .rbc-today {
+  background: hsl(var(--primary) / 0.08);
+}
+.harmony-rbc .rbc-header,
+.harmony-rbc .rbc-time-header-content,
+.harmony-rbc .rbc-time-gutter,
+.harmony-rbc .rbc-agenda-time-cell {
+  border-color: hsl(var(--border));
+  color: hsl(var(--muted-foreground));
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+.harmony-rbc .rbc-month-view,
+.harmony-rbc .rbc-time-view,
+.harmony-rbc .rbc-agenda-view table.rbc-agenda-table,
+.harmony-rbc .rbc-time-content,
+.harmony-rbc .rbc-time-header,
+.harmony-rbc .rbc-month-row,
+.harmony-rbc .rbc-day-bg + .rbc-day-bg,
+.harmony-rbc .rbc-agenda-table tbody > tr > td,
+.harmony-rbc .rbc-agenda-table thead > tr > th,
+.harmony-rbc .rbc-timeslot-group,
+.harmony-rbc .rbc-day-slot .rbc-time-slot {
+  border-color: hsl(var(--border)) !important;
+}
+.harmony-rbc .rbc-event {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border: none;
+  border-radius: 0.5rem;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.harmony-rbc .rbc-event.rbc-selected {
+  background-color: hsl(var(--primary) / 0.85);
+}
+.harmony-rbc .rbc-current-time-indicator {
+  background-color: hsl(var(--accent));
+}
+.harmony-rbc .rbc-toolbar button {
+  color: hsl(var(--muted-foreground));
+  background: hsl(var(--secondary));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.5rem;
+  font-weight: 700;
+  font-size: 0.75rem;
+}
+.harmony-rbc .rbc-toolbar button:hover {
+  color: hsl(var(--foreground));
+  background: hsl(var(--secondary));
+}
+.harmony-rbc .rbc-toolbar button.rbc-active,
+.harmony-rbc .rbc-toolbar button.rbc-active:hover {
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+  border-color: hsl(var(--primary));
+}
+.harmony-rbc .rbc-toolbar-label {
+  font-weight: 700;
+  color: hsl(var(--foreground));
+}
+.harmony-rbc .rbc-show-more {
+  color: hsl(var(--primary));
+  font-weight: 600;
+}
+.harmony-rbc .rbc-agenda-table thead {
+  background: hsl(var(--secondary) / 0.5);
 }

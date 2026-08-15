@@ -6,6 +6,10 @@ module.exports = {
     extend: {
       fontFamily: {
         heebo: ['var(--font-heebo)'],
+        // Latin/numeric-only — see index.html for the font load. Hebrew
+        // content always uses `heebo` (the `body` default), in both themes.
+        display: ['Archivo', 'sans-serif'],
+        mono: ['Inconsolata', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',
@@ -43,7 +47,12 @@ module.exports = {
           DEFAULT: 'hsl(var(--destructive))',
           foreground: 'hsl(var(--destructive-foreground))'
         },
+        warning: {
+          DEFAULT: 'hsl(var(--warning))',
+          foreground: 'hsl(var(--warning-foreground))'
+        },
         border: 'hsl(var(--border))',
+        'border-accent': 'hsl(var(--border-accent))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         chart: {

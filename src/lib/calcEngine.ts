@@ -18,16 +18,23 @@ export const CalcParamsSchema = z.object({
   commissionPct: z.number().min(0).max(100).default(0),
   isOwnerTreating: z.boolean().default(true),
   wageMode: z.enum(['min', 'hr']).default('min'),
-  shiftHours: z.number().min(0.25).default(6),
   incomeGuarantee: z.boolean().default(false),
   guaranteeMin3h: z.number().min(0).default(150),
-  guaranteeMinShift: z.number().min(0).default(300),
+  /** "הגעה ברכב אחד (איחוד נסיעות)" — all therapists travel together in a
+   *  single car, so travel cost is charged for exactly one vehicle
+   *  regardless of therapist count. */
+  oneCarArrival: z.boolean().default(false),
 });
 
 export type CalcParams = z.infer<typeof CalcParamsSchema>;
 // Accept any partial/unknown-shaped object (e.g. straight from localStorage or
 // a controlled form) — Zod fills in defaults and strips unrecognized keys.
 export type CalcParamsInput = Partial<CalcParams> & Record<string, unknown>;
+
+// Direct fuel cost only (no depreciation/wear) — ₪/liter and km/liter are
+// fixed business constants, not user-configurable inputs.
+const FUEL_PRICE_PER_LITER = 8;
+const FUEL_KM_PER_LITER = 10;
 
 export interface CalculationResult {
   totalMinutes: number;
@@ -42,6 +49,7 @@ export interface CalculationResult {
   margin: number;
   hourlyWage: number;
   paidTherapists: number;
+  vehicleCount: number;
 }
 
 export function calculateEvent(rawParams: CalcParamsInput): CalculationResult {
@@ -56,7 +64,7 @@ export function calculateEvent(rawParams: CalcParamsInput): CalculationResult {
     isOwnerTreating,
     incomeGuarantee,
     guaranteeMin3h,
-    guaranteeMinShift,
+    oneCarArrival,
   } = CalcParamsSchema.parse(rawParams);
 
   const bnTherapists = new BigNumber(therapists);
@@ -76,15 +84,23 @@ export function calculateEvent(rawParams: CalcParamsInput): CalculationResult {
 
   const hourlyWageBN = new BigNumber(wagePerMinute).times(60);
   const totalWageBN = bnPaidTherapists.times(bnHours).times(hourlyWageBN);
-  const totalTravelBN = bnPaidTherapists.times(new BigNumber(travelKm).times(0.75));
 
-  // Income guarantee supplement per therapist
+  // Vehicle count: one car if arriving together, otherwise one car per
+  // paid therapist (mirrors the owner-treating discount already applied
+  // to paidTherapists above).
+  const vehicleCount = oneCarArrival ? 1 : paidTherapists;
+  const bnVehicleCount = new BigNumber(vehicleCount);
+  const fuelCostPerVehicleBN = new BigNumber(travelKm).dividedBy(FUEL_KM_PER_LITER).times(FUEL_PRICE_PER_LITER);
+  const totalTravelBN = fuelCostPerVehicleBN.times(bnVehicleCount);
+
+  // Income guarantee supplement per therapist — an hourly FLOOR RATE
+  // (guaranteeMin3h ₪/hour): if the real hourly wage is below that rate,
+  // top up the shortfall for every hour of the event. Applies only to
+  // events under 4 hours (business decision) — a 4h+ event pays plain
+  // wage with no guarantee involved at all, regardless of its length.
   let guaranteeSupplementBN = new BigNumber(0);
-  if (incomeGuarantee && paidTherapists > 0) {
-    const isHalfShift = hours <= 3;
-    const minGuarantee = new BigNumber(isHalfShift ? guaranteeMin3h : guaranteeMinShift);
-    const wagePerTherapistBN = bnHours.times(hourlyWageBN);
-    const supplementPerTherapistBN = BigNumber.max(0, minGuarantee.minus(wagePerTherapistBN));
+  if (incomeGuarantee && paidTherapists > 0 && hours < 4) {
+    const supplementPerTherapistBN = BigNumber.max(0, new BigNumber(guaranteeMin3h).minus(hourlyWageBN)).times(bnHours);
     guaranteeSupplementBN = supplementPerTherapistBN.times(bnPaidTherapists);
   }
 
@@ -107,28 +123,35 @@ export function calculateEvent(rawParams: CalcParamsInput): CalculationResult {
     margin: marginBN.toNumber(),
     hourlyWage: hourlyWageBN.toNumber(),
     paidTherapists,
+    vehicleCount,
   };
 }
 
+// Symbol immediately before the digits, no space — matches the quote
+// PDF's money formatting (PdfTotals.tsx) for consistency across the app.
 export function formatILS(num: number): string {
-  return Math.round(num).toLocaleString('he-IL') + ' ₪';
+  return '₪' + Math.round(num).toLocaleString('he-IL');
 }
 
 // Local storage helpers
 const STORAGE_KEY = 'harmony_ws_params';
 
 export function saveParams(params: unknown): void {
+  const validated = CalcParamsSchema.safeParse(params);
+  if (!validated.success) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(params));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(validated.data));
   } catch {
     // silent fail
   }
 }
 
-export function loadParams(): Record<string, unknown> | null {
+export function loadParams(): CalcParams | null {
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : null;
+    if (!saved) return null;
+    const validated = CalcParamsSchema.safeParse(JSON.parse(saved));
+    return validated.success ? validated.data : null;
   } catch {
     return null;
   }

@@ -1,3 +1,13 @@
+# Claude Code tooling — session/agent config, not application source.
+# Note: this does NOT retroactively untrack files already committed under
+# these paths (git-ignore only affects new/untracked files) — it only
+# guards against a future broad `git add -A`/`git add .` accidentally
+# staging new additions here.
+.claude/
+.agents/
+.mcp.json
+skills-lock.json
+
 # Claude Code audit backups (scratch, not project content)
 .claude-audit-backup-*/
 

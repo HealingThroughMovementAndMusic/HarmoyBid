@@ -206,7 +206,7 @@ interface NavListProps {
 function NavList({ navItems, selected, onSelect, onOpenCommandPalette, open, instanceId }: NavListProps) {
   return (
     <>
-      <div className="space-y-1 flex-1 min-h-0 overflow-y-auto harmony-scroll pe-0.5">
+      <div className="space-y-1 flex-1 min-h-0 overflow-y-auto harmony-scroll pr-0.5">
         {navItems.map((option, i) => {
           const isNewGroup = option.group && option.group !== navItems[i - 1]?.group;
           return (
@@ -346,7 +346,7 @@ function Option({ icon: Icon, title, selected, onSelect, open, notifs, instanceI
       {open && <span className="relative z-10 truncate text-sm font-medium">{title}</span>}
 
       {notifs !== undefined && open && (
-        <span className="absolute end-3 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
+        <span className="absolute right-3 z-10 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
           {notifs}
         </span>
       )}
@@ -501,7 +501,7 @@ function DashboardContent({ title, subtitle, isDark, setIsDark, onOpenMobileNav,
           </button>
           <button className="relative rounded-lg border border-border bg-card p-2 text-muted-foreground transition-colors hover:text-foreground">
             <Bell className="h-5 w-5" />
-            <span className="absolute -top-1 -end-1 h-3 w-3 rounded-full bg-destructive" />
+            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-destructive" />
           </button>
           <button
             onClick={() => setIsDark(!isDark)}

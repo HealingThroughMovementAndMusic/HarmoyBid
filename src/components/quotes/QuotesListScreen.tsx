@@ -10,7 +10,7 @@ import EmptyState from '@/components/shared/EmptyState';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { listQuotes, deleteQuote } from '@/lib/quotes/quoteApi';
-import { QUOTE_STATUS_LABELS, QUOTE_TYPE_LABELS, type Quote, type QuoteStatus } from '@/lib/quotes/quote';
+import { QUOTE_STATUS_LABELS, QUOTE_TYPE_LABELS, formatDateHe, type Quote, type QuoteStatus } from '@/lib/quotes/quote';
 
 interface QuotesListScreenProps {
   onBack: () => void;
@@ -60,6 +60,13 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
       .then(setQuotes)
       .catch((err) => setError(err instanceof Error ? err.message : 'טעינת ההצעות נכשלה.'));
   }, []);
+
+  // Drafts callout — a dedicated, always-visible section for quotes that
+  // were only ever autosaved and never explicitly sent/signed, independent
+  // of the status filter chips above. Reuses the exact same onOpen/delete
+  // mechanics as the main table (setPendingDeleteId opens the one shared
+  // delete-confirmation dialog below), never a separate deletion path.
+  const drafts = useMemo(() => (quotes ? quotes.filter((q) => q.status === 'draft') : []), [quotes]);
 
   const filtered = useMemo(() => {
     if (!quotes) return [];
@@ -126,6 +133,41 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
           <Plus className="w-4 h-4" /> הצעה חדשה
         </button>
       </div>
+
+      {drafts.length > 0 && (
+        <div className="rounded-xl border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
+          <h3 className="text-sm font-bold text-foreground">הצעות טיוטה שטרם נשלחו</h3>
+          <div className="space-y-2">
+            {drafts.map((draft) => (
+              <div
+                key={draft.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-foreground truncate">
+                    {draft.quoteNumber} · {partyName(draft)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {draft.createdAt ? draft.createdAt.toLocaleDateString('he-IL') : '—'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button size="sm" variant="outline" onClick={() => onOpen(draft)}>
+                    המשך עריכה
+                  </Button>
+                  <button
+                    onClick={() => setPendingDeleteId(draft.id)}
+                    aria-label={`מחק טיוטה ${draft.quoteNumber}`}
+                    className="text-muted-foreground hover:text-destructive transition-colors p-1.5"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <GlassPanel className="p-4 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
@@ -201,7 +243,7 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
                     {quote.quoteNumber} · {partyName(quote)}
                   </TableCell>
                   <TableCell className="text-muted-foreground">{QUOTE_TYPE_LABELS[quote.quoteType]}</TableCell>
-                  <TableCell className="text-muted-foreground">{quote.eventDate ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">{quote.eventDate ? formatDateHe(quote.eventDate) : '—'}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {quote.createdAt ? quote.createdAt.toLocaleDateString('he-IL') : '—'}
                   </TableCell>

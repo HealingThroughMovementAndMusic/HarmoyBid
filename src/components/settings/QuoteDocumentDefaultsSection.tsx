@@ -99,7 +99,7 @@ export default function QuoteDocumentDefaultsSection() {
               </motion.span>
             )}
             <MotionButton whileTap={{ scale: 0.97 }} type="button" onClick={() => void handleSave()} disabled={saving} size="sm">
-              {saving ? <Loader2 className="w-4 h-4 animate-spin ms-1.5" aria-hidden="true" /> : null}
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" aria-hidden="true" /> : null}
               שמירה
             </MotionButton>
           </div>

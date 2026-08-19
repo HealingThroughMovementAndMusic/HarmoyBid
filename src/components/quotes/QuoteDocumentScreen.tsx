@@ -261,6 +261,12 @@ function QuoteDocumentForm({
       link.click();
       URL.revokeObjectURL(url);
       toast({ title: 'קובץ ה-PDF יוצא בהצלחה' });
+    } catch (err) {
+      toast({
+        title: 'ייצוא ה-PDF נכשל',
+        description: err instanceof Error ? err.message : 'שגיאה לא צפויה. נסי שוב.',
+        variant: 'destructive',
+      });
     } finally {
       setPdfBusy(false);
     }

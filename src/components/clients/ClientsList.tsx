@@ -14,10 +14,10 @@ import { cn, coerceValidatedText } from '@/lib/utils';
 import {
   ClientSchema,
   CLIENT_STATUS_LABELS,
-  DEFAULT_CLIENTS,
   type Client,
   type ClientStatus,
 } from '@/lib/clients';
+import { usePersistedClients } from '@/hooks/usePersistedClients';
 import ClientProfile from './ClientProfile';
 
 const NAME_SCHEMA = z.string().min(1).max(200);
@@ -40,7 +40,7 @@ const STATUS_BADGE_VARIANT: Record<ClientStatus, string> = {
 // researched had a built-in mobile fallback, so this is designed in
 // explicitly per the spec's cross-cutting risk note.
 export default function ClientsList({ autoOpenCreate, onAutoOpenHandled }: ClientsListProps = {}) {
-  const [clients, setClients] = useState<Client[]>(DEFAULT_CLIENTS);
+  const { clients, setClients } = usePersistedClients();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ClientStatus | null>(null);
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);

@@ -51,6 +51,31 @@ const QUOTE_TYPE_LABELS: Record<string, string> = {
   company_event: 'אירוע חברה',
 };
 
+// Writes to `activity_log` (see supabase/migrations,
+// "add_signed_at_and_activity_log") — duplicated here rather than
+// imported from src/ (Edge Functions can't import from there, same
+// reason other constants are already duplicated in this project's
+// functions). `quote_signed` is one of the two "terminal" action types
+// with a DB-level unique index on (entity_type, entity_id, action_type)
+// — upsert+ignoreDuplicates makes a retried/duplicate call a harmless
+// no-op instead of an error. Never awaited by the main request path for
+// calendar_synced/calendar_sync_failed (those run inside the background
+// waitUntil already used for Calendar sync); quote_signed itself IS
+// awaited before the response is sent, since it must be logged exactly
+// once per real signing regardless of whether the background Calendar
+// job ever runs at all (a clinic_treatment quote has no Calendar step).
+async function logActivity(
+  serviceClient: ReturnType<typeof createClient>,
+  input: { actionType: string; entityId: string; title: string; terminal?: boolean }
+) {
+  const row = { action_type: input.actionType, entity_type: 'quote', entity_id: input.entityId, title: input.title };
+  const query = input.terminal
+    ? serviceClient.from('activity_log').upsert(row, { onConflict: 'entity_type,entity_id,action_type', ignoreDuplicates: true })
+    : serviceClient.from('activity_log').insert(row);
+  const { error } = await query;
+  if (error) console.error(`logActivity: failed to log ${input.actionType} for ${input.entityId}:`, error.message);
+}
+
 // Israel-only business — same fixed IANA zone as googleCalendar.ts, but
 // here we need an actual UTC instant (Postgres `timestamptz` has no
 // concept of "local time in a zone"), not just a zone name to hand to an
@@ -102,16 +127,19 @@ function israelLocalToUtc(dateStr: string, timeStr: string): Date {
 // surfacing to the client. Returns the created event's id (or null on
 // any failure/skip) so the caller can store it on the booking row for
 // later deletion — see createBookingForSignedQuote below.
-async function syncQuoteToCalendar(quote: {
-  id: string;
-  quoteType: string;
-  clientName: string | null;
-  companyName: string | null;
-  eventDate: string | null;
-  eventStartTime: string | null;
-  eventEndTime: string | null;
-  eventTherapistCount: number | null;
-}): Promise<string | null> {
+async function syncQuoteToCalendar(
+  serviceClient: ReturnType<typeof createClient>,
+  quote: {
+    id: string;
+    quoteType: string;
+    clientName: string | null;
+    companyName: string | null;
+    eventDate: string | null;
+    eventStartTime: string | null;
+    eventEndTime: string | null;
+    eventTherapistCount: number | null;
+  }
+): Promise<string | null> {
   if (quote.quoteType !== 'private_event' && quote.quoteType !== 'company_event') return null;
   if (!quote.eventDate || !quote.eventStartTime || !quote.eventEndTime) {
     console.log(`syncQuoteToCalendar: quote ${quote.id} missing full event date/time, skipping.`);
@@ -131,13 +159,26 @@ async function syncQuoteToCalendar(quote: {
       end: `${quote.eventDate}T${quote.eventEndTime}:00`,
     });
     console.log(`syncQuoteToCalendar: created event ${result.eventId} for quote ${quote.id}`);
+    await logActivity(serviceClient, {
+      actionType: 'calendar_synced',
+      entityId: quote.id,
+      title: `אירוע סונכרן ליומן Google — ${partyName}`,
+    });
     return result.eventId;
   } catch (err) {
     if (err instanceof CalendarNotConfiguredError) {
+      // Not yet activated (missing secrets) — an expected, inert state
+      // for a project that hasn't connected Calendar yet, not a real
+      // failure worth surfacing as an activity a user needs to act on.
       console.error('syncQuoteToCalendar: Calendar sync not configured, skipping.', err.message);
       return null;
     }
     console.error('syncQuoteToCalendar: failed to create Calendar event:', err);
+    await logActivity(serviceClient, {
+      actionType: 'calendar_sync_failed',
+      entityId: quote.id,
+      title: `סנכרון ליומן Google נכשל — ${partyName}`,
+    });
     return null;
   }
 }
@@ -231,7 +272,7 @@ async function syncQuoteToCalendarAndBooking(
     eventTherapistCount: number | null;
   }
 ) {
-  const googleEventId = await syncQuoteToCalendar(quote);
+  const googleEventId = await syncQuoteToCalendar(serviceClient, quote);
   await createBookingForSignedQuote(serviceClient, quote, googleEventId);
 }
 
@@ -287,12 +328,14 @@ Deno.serve(async (req) => {
     });
   }
 
+  const signedAt = new Date().toISOString();
   const { data: row, error: updateError } = await serviceClient
     .from('quotes')
     .update({
       client_signature_data_url: body.signatureDataUrl,
       status: 'signed',
-      updated_at: new Date().toISOString(),
+      signed_at: signedAt,
+      updated_at: signedAt,
     })
     .eq('id', body.quoteId)
     .select('*, quote_line_items(*)')
@@ -344,7 +387,21 @@ Deno.serve(async (req) => {
     lineItems,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    signedAt: row.signed_at,
   };
+
+  // Logged synchronously (awaited before the response) rather than inside
+  // the background waitUntil below — this must be recorded exactly once
+  // per real signing regardless of whether the Calendar step ever runs
+  // (clinic_treatment quotes have no Calendar step at all, and the
+  // waitUntil work happens after the response is already sent).
+  const partyName = quote.companyName || quote.clientName || 'לקוח ללא שם';
+  await logActivity(serviceClient, {
+    actionType: 'quote_signed',
+    entityId: quote.id,
+    title: `הצעה ${quote.quoteNumber || quote.id} — ${partyName} נחתמה`,
+    terminal: true,
+  });
 
   // Won't block this response — runs in the background after it's sent.
   EdgeRuntime.waitUntil(

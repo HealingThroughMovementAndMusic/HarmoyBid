@@ -18,6 +18,7 @@ import { EQUIPMENT_PROVIDER_LABELS, type EventPackage } from '@/lib/eventCatalog
 import { usePersistedPackages } from '@/hooks/usePersistedPackages';
 import { usePersistedBookings } from '@/hooks/usePersistedBookings';
 import { useQuoteStats } from '@/hooks/useQuoteStats';
+import { useActivityLog } from '@/hooks/useActivityLog';
 import { signOut } from '@/lib/auth/auth';
 import { QuoteClientNameSchema, type Quote, type QuoteLineItem, type QuoteType } from '@/lib/quotes/quote';
 import { hydrateBusinessProfile } from '@/lib/business/businessProfile';
@@ -277,7 +278,8 @@ export default function Home() {
   // they only ever consumed a plain [array, setState-shaped setter] pair.
   const { packages, setPackages } = usePersistedPackages();
   const { bookings, setBookings } = usePersistedBookings();
-  const quoteStats = useQuoteStats(bookings);
+  const { stats: quoteStats, revenueTrend } = useQuoteStats(bookings);
+  const recentActivity = useActivityLog();
 
   return (
     <>
@@ -294,7 +296,15 @@ export default function Home() {
         onIsDarkChange={handleIsDarkChange}
       >
       {activeNav === 'לוח בקרה' && (
-        <DashboardOverview packages={packages} bookings={bookings} quoteStats={quoteStats} onNavigate={handleNavigate} onQuickAction={handleQuickAction} />
+        <DashboardOverview
+          packages={packages}
+          bookings={bookings}
+          quoteStats={quoteStats}
+          revenueTrend={revenueTrend}
+          recentActivity={recentActivity}
+          onNavigate={handleNavigate}
+          onQuickAction={handleQuickAction}
+        />
       )}
 
       {activeNav === 'הצעות מחיר' && (

@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { coerceValidatedText } from '@/lib/utils';
 import { BookedEventSchema, BookingStatusSchema, deleteBookingAndCalendarEvent, type BookedEvent } from '@/lib/scheduling';
+import { logActivity } from '@/lib/activity/activityLog';
 import { z } from 'zod';
 
 const localizer = dateFnsLocalizer({
@@ -171,10 +172,35 @@ export default function EventsCalendar({ bookings, setBookings, autoOpenCreate, 
     });
     setBookings((prev) => [...prev, newBooking]);
     setCreateOpen(false);
+    logActivity({
+      actionType: 'booking_created',
+      entityType: 'booking',
+      entityId: newBooking.id,
+      title: `אירוע נקבע ביומן: ${newBooking.title}`,
+    }).catch((err) => console.error('EventsCalendar: failed to log booking_created activity', err));
   };
 
   const updateBooking = (id: string, updates: Partial<BookedEvent>) => {
     setBookings((prev) => prev.map((b) => (b.id === id ? BookedEventSchema.parse({ ...b, ...updates }) : b)));
+  };
+
+  // A dedicated wrapper around the status-button click only — updateBooking()
+  // above is a fully generic setter also used for trivial field edits
+  // (title, location, therapists), so logging inside it would spam an
+  // activity row for every keystroke. This only fires when the status
+  // actually transitions *into* 'cancelled' from something else — clicking
+  // an already-cancelled booking's "cancelled" button again is a no-op
+  // that logs nothing.
+  const handleStatusChange = (booking: BookedEvent, status: BookedEvent['status']) => {
+    updateBooking(booking.id, { status });
+    if (status === 'cancelled' && booking.status !== 'cancelled') {
+      logActivity({
+        actionType: 'booking_cancelled',
+        entityType: 'booking',
+        entityId: booking.id,
+        title: `אירוע בוטל: ${booking.title}`,
+      }).catch((err) => console.error('EventsCalendar: failed to log booking_cancelled activity', err));
+    }
   };
 
   // Date/start/end-time editing for the details dialog — a single shared
@@ -205,6 +231,12 @@ export default function EventsCalendar({ bookings, setBookings, autoOpenCreate, 
       setBookings((prev) => prev.filter((b) => b.id !== booking.id));
       setSelectedBookingId(null);
       toast({ title: 'האירוע נמחק' });
+      logActivity({
+        actionType: 'booking_deleted',
+        entityType: 'booking',
+        entityId: booking.id,
+        title: `אירוע נמחק מהיומן: ${booking.title}`,
+      }).catch((err) => console.error('EventsCalendar: failed to log booking_deleted activity', err));
     } catch (err) {
       toast({
         title: 'מחיקת האירוע נכשלה',
@@ -393,7 +425,7 @@ export default function EventsCalendar({ bookings, setBookings, autoOpenCreate, 
                     {BookingStatusSchema.options.map((status) => (
                       <button
                         key={status}
-                        onClick={() => updateBooking(selectedBooking.id, { status })}
+                        onClick={() => handleStatusChange(selectedBooking, status)}
                         className={`flex-1 py-1.5 rounded-md text-xs font-bold border transition-colors ${
                           selectedBooking.status === status
                             ? 'bg-primary text-primary-foreground border-primary'

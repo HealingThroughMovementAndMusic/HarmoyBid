@@ -32,6 +32,7 @@ interface QuoteRow {
   storage_path: string | null;
   created_at: string;
   updated_at: string;
+  signed_at: string | null;
   quote_line_items: QuoteLineItemRow[];
 }
 
@@ -86,6 +87,7 @@ function fromRow(row: QuoteRow): Quote {
     lineItems,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    signedAt: row.signed_at,
   });
 }
 

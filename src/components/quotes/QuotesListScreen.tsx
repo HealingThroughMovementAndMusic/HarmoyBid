@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { listQuotes, deleteQuote } from '@/lib/quotes/quoteApi';
 import { getBooking, deleteBookingAndCalendarEvent } from '@/lib/scheduling';
+import { logActivity } from '@/lib/activity/activityLog';
 import { QUOTE_STATUS_LABELS, QUOTE_TYPE_LABELS, formatDateHe, type Quote, type QuoteStatus } from '@/lib/quotes/quote';
 
 // Typed-confirmation word required before a *signed* quote can be
@@ -109,9 +110,13 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
   const signedDeleteConfirmed = !deletingSignedQuote || deleteConfirmText.trim() === SIGNED_DELETE_CONFIRM_WORD;
 
   const handleConfirmDelete = async () => {
-    if (!pendingDeleteId || !signedDeleteConfirmed) return;
+    if (!pendingDeleteId || !quoteToDelete || !signedDeleteConfirmed) return;
     setDeleting(true);
     setDeleteError(null);
+    // Snapshot captured before the delete — the activity row must stay
+    // readable after the quote itself is gone (append-only, no live join).
+    const deletedQuoteNumber = quoteToDelete.quoteNumber || quoteToDelete.id;
+    const deletedPartyName = partyName(quoteToDelete);
     try {
       // A signed quote's id is also its bookings.id (see
       // sign-quote/index.ts's createBookingForSignedQuote) — tear that
@@ -130,6 +135,12 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
       setPendingDeleteId(null);
       setDeleteConfirmText('');
       toast({ title: 'ההצעה נמחקה' });
+      logActivity({
+        actionType: 'quote_deleted',
+        entityType: 'quote',
+        entityId: pendingDeleteId,
+        title: `הצעה ${deletedQuoteNumber} — ${deletedPartyName} נמחקה`,
+      }).catch((err) => console.error('QuotesListScreen: failed to log quote_deleted activity', err));
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'מחיקת ההצעה נכשלה.');
     } finally {

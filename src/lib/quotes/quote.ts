@@ -133,6 +133,13 @@ export const QuoteSchema = z.object({
 
   createdAt: z.coerce.date().optional(),
   updatedAt: z.coerce.date().optional(),
+  /** Set exactly once, server-side, by sign-quote's UPDATE when status
+   *  first flips to 'signed' — never overwritten by any later edit
+   *  (saveQuote() never writes this field). This is the correct anchor
+   *  for "which month's revenue does this quote belong to" — unlike
+   *  `updatedAt`, it can't be silently bumped by an unrelated later edit
+   *  to an already-signed quote. Null for any quote that isn't signed. */
+  signedAt: z.coerce.date().nullable().optional(),
 });
 export type Quote = z.infer<typeof QuoteSchema>;
 

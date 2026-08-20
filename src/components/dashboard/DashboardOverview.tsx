@@ -1,18 +1,39 @@
-import { FileText, TrendingUp, CalendarDays, Library, Plus, Calculator, BarChart3, UserPlus, CalendarPlus } from 'lucide-react';
+import {
+  FileText,
+  TrendingUp,
+  CalendarDays,
+  Library,
+  Plus,
+  Calculator,
+  BarChart3,
+  UserPlus,
+  CalendarPlus,
+  CheckCircle2,
+  Trash2,
+  CalendarX,
+  Cloud,
+  CloudOff,
+} from 'lucide-react';
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { SolidCard } from '@/components/shared/GlassPanel';
 import EmptyState from '@/components/shared/EmptyState';
-import ActivityFeed from '@/components/shared/ActivityFeed';
+import ActivityFeed, { type ActivityItem } from '@/components/shared/ActivityFeed';
 import AnimatedNumber from '@/components/shared/AnimatedNumber';
 import { FloatingDock, type FloatingDockItem } from '@/components/shared/FloatingDock';
 import type { EventPackage } from '@/lib/eventCatalog';
 import type { BookedEvent } from '@/lib/scheduling';
-import type { QuoteStats } from '@/lib/quotes/quoteStats';
+import type { QuoteStats, RevenueTrendPoint } from '@/lib/quotes/quoteStats';
+import type { ActivityActionType, ActivityLogEntry } from '@/lib/activity/activityLog';
 
 interface DashboardOverviewProps {
   packages: EventPackage[];
   bookings: BookedEvent[];
   /** Real Supabase-backed quote counts/revenue, live via Realtime — `null` only while the first fetch is still in flight. */
   quoteStats: QuoteStats | null;
+  /** Last 6 calendar months' signed, non-cancelled revenue — same `null`-while-loading convention as `quoteStats`. */
+  revenueTrend: RevenueTrendPoint[] | null;
+  /** Most recent activity_log rows, live via Realtime — `null` only while the first fetch is still in flight. */
+  recentActivity: ActivityLogEntry[] | null;
   onNavigate: (tab: string) => void;
   onQuickAction: (tab: string, action: 'create-client' | 'create-booking') => void;
 }
@@ -23,6 +44,25 @@ function formatMoney(value: number): string {
   return `₪${Math.round(value).toLocaleString('he-IL')}`;
 }
 
+const ACTIVITY_ICONS: Record<ActivityActionType, typeof FileText> = {
+  quote_signed: CheckCircle2,
+  quote_deleted: Trash2,
+  booking_created: CalendarPlus,
+  booking_cancelled: CalendarX,
+  booking_deleted: Trash2,
+  calendar_synced: Cloud,
+  calendar_sync_failed: CloudOff,
+};
+
+function toActivityItems(entries: ActivityLogEntry[]): ActivityItem[] {
+  return entries.map((entry) => ({
+    id: entry.id,
+    icon: ACTIVITY_ICONS[entry.actionType],
+    title: entry.title,
+    timestamp: entry.occurredAt.toLocaleDateString('he-IL'),
+  }));
+}
+
 // Dashboard overview — the at-a-glance landing screen (Design Spec Phase 2,
 // C1). Every KPI tile now reads real, live, Supabase-backed data: quotes/
 // packages/bookings are all real tables with Realtime subscriptions (see
@@ -31,11 +71,22 @@ function formatMoney(value: number): string {
 // these tiles without a manual refresh. `quoteStats === null` (only true
 // during the very first fetch) still renders "—" rather than a fabricated
 // "0", preserving the original "no data yet" vs. "genuinely zero"
-// distinction — it's just no longer a permanent state.
-export default function DashboardOverview({ packages, bookings, quoteStats, onNavigate, onQuickAction }: DashboardOverviewProps) {
+// distinction — it's just no longer a permanent state. Same convention
+// applied to `revenueTrend`/`recentActivity` below.
+export default function DashboardOverview({
+  packages,
+  bookings,
+  quoteStats,
+  revenueTrend,
+  recentActivity,
+  onNavigate,
+  onQuickAction,
+}: DashboardOverviewProps) {
   const upcomingBookings = bookings
     .filter((b) => b.start.getTime() >= Date.now() && b.status !== 'cancelled')
     .sort((a, b) => a.start.getTime() - b.start.getTime());
+
+  const hasRevenueData = revenueTrend !== null && revenueTrend.some((p) => p.total > 0);
 
   const quickActions: FloatingDockItem[] = [
     { title: 'הצעת מחיר חדשה', icon: <FileText className="h-full w-full" />, onClick: () => onNavigate('הצעות מחיר') },
@@ -86,29 +137,61 @@ export default function DashboardOverview({ packages, bookings, quoteStats, onNa
           )}
         </SolidCard>
 
-        {/* Revenue overview — gated on real data (Design Spec Phase 2, C7's
-            build-order principle applies equally here: no fabricated chart
-            over data that doesn't exist yet). */}
+        {/* Revenue overview — live snapshot of the last 6 calendar months
+            (see quoteStats.ts's computeRevenueTrend), gated on real data
+            the same way every other tile on this page is: no chart shown
+            until there's at least one non-zero month. */}
         <SolidCard>
           <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 text-primary" aria-hidden="true" /> סקירת הכנסות
           </h3>
-          <EmptyState
-            icon={BarChart3}
-            title="אין עדיין נתוני הכנסות"
-            description="גרף ההכנסות יופיע כאן לאחר שהצעות מחיר יתועדו לצמיתות במערכת."
-          />
+          {!hasRevenueData ? (
+            <EmptyState
+              icon={BarChart3}
+              title="אין עדיין נתוני הכנסות"
+              description="גרף ההכנסות יופיע כאן לאחר שהצעות מחיר יחתמו במערכת."
+            />
+          ) : (
+            <div className="h-56">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueTrend ?? []}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 12, fill: 'hsl(var(--muted-foreground))' }} axisLine={false} tickLine={false} />
+                  <YAxis
+                    tickFormatter={(v) => formatMoney(Number(v))}
+                    tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={70}
+                  />
+                  <Tooltip
+                    formatter={(value) => formatMoney(Number(value))}
+                    contentStyle={{
+                      background: 'hsl(var(--card))',
+                      border: '1px solid hsl(var(--border))',
+                      borderRadius: '8px',
+                      direction: 'rtl',
+                    }}
+                    labelStyle={{ color: 'hsl(var(--foreground))' }}
+                  />
+                  <Bar dataKey="total" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </SolidCard>
       </div>
 
-      {/* Recent activity — honest gap: no activity log exists yet (would
-          require instrumenting every create/update/delete across the app),
-          so this stays an explicit EmptyState rather than fabricated rows. */}
+      {/* Recent activity — real, live activity_log data (see
+          useActivityLog.ts). `null` only during the very first fetch. */}
       <SolidCard>
         <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-1.5">
           <FileText className="w-4 h-4 text-primary" aria-hidden="true" /> פעילות אחרונה
         </h3>
-        <ActivityFeed items={[]} emptyDescription="יומן פעילות טרם מומש — פעולות אחרונות (הצעות, אירועים, חבילות) יופיעו כאן בעתיד." />
+        <ActivityFeed
+          items={recentActivity ? toActivityItems(recentActivity) : []}
+          emptyDescription="פעולות אחרונות (חתימות, אירועים, מחיקות) יופיעו כאן."
+        />
       </SolidCard>
     </div>
   );

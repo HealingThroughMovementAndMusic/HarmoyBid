@@ -18,6 +18,7 @@ import {
   type ClientStatus,
 } from '@/lib/clients';
 import { usePersistedClients } from '@/hooks/usePersistedClients';
+import type { BookedEvent } from '@/lib/scheduling';
 import ClientProfile from './ClientProfile';
 
 const NAME_SCHEMA = z.string().min(1).max(200);
@@ -27,6 +28,8 @@ interface ClientsListProps {
   /** Set true (by the parent) to pop the create dialog open on mount/update — the Dashboard's "לקוח חדש" quick action deep-link. One-shot: consumed via onAutoOpenHandled. */
   autoOpenCreate?: boolean;
   onAutoOpenHandled?: () => void;
+  /** Real, live bookings from the caller (Home.tsx's usePersistedBookings()) — threaded through to ClientProfile's "אירועים" section. */
+  bookings: BookedEvent[];
 }
 
 const STATUS_BADGE_VARIANT: Record<ClientStatus, string> = {
@@ -39,7 +42,7 @@ const STATUS_BADGE_VARIANT: Record<ClientStatus, string> = {
 // TanStack-based) on desktop, stacked card list on mobile — no candidate
 // researched had a built-in mobile fallback, so this is designed in
 // explicitly per the spec's cross-cutting risk note.
-export default function ClientsList({ autoOpenCreate, onAutoOpenHandled }: ClientsListProps = {}) {
+export default function ClientsList({ autoOpenCreate, onAutoOpenHandled, bookings }: ClientsListProps) {
   const { clients, setClients } = usePersistedClients();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ClientStatus | null>(null);
@@ -130,6 +133,7 @@ export default function ClientsList({ autoOpenCreate, onAutoOpenHandled }: Clien
         >
           <ClientProfile
             client={selectedClient}
+            bookings={bookings}
             onBack={() => setSelectedClientId(null)}
             onChange={(updates) => updateClient(selectedClient.id, updates)}
           />

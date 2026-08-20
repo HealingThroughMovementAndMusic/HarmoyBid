@@ -1,4 +1,5 @@
-import { ArrowRight, Mail, Phone, CalendarDays, FileText, StickyNote, UserPlus } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowRight, Mail, Phone, CalendarDays, FileText, StickyNote, UserPlus, Loader2 } from 'lucide-react';
 import { GlassPanel } from '@/components/shared/GlassPanel';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
@@ -7,12 +8,20 @@ import EmptyState from '@/components/shared/EmptyState';
 import { coerceValidatedText } from '@/lib/utils';
 import { z } from 'zod';
 import { CLIENT_STATUS_LABELS, type Client } from '@/lib/clients';
-import { DEFAULT_BOOKINGS } from '@/lib/scheduling';
+import type { BookedEvent } from '@/lib/scheduling';
+import { listQuotesByClientId } from '@/lib/quotes/quoteApi';
+import { QUOTE_STATUS_LABELS, type Quote } from '@/lib/quotes/quote';
 
 const NotesSchema = z.string().max(2000);
 
 interface ClientProfileProps {
   client: Client;
+  /** Real, live bookings (already Realtime-synced by the caller — see
+   *  usePersistedBookings.ts) — no formal client_id on bookings yet, so
+   *  matched by clientName, same limitation already documented for the
+   *  "אירועים" section before this change, just no longer backed by
+   *  hardcoded seed data. */
+  bookings: BookedEvent[];
   onBack: () => void;
   onChange: (updates: Partial<Client>) => void;
 }
@@ -20,14 +29,25 @@ interface ClientProfileProps {
 // Full-screen glass panel, not a modal — a client profile has real depth
 // (history/notes/quotes/appointments) a modal would cramp (Design Spec
 // Phase 2, C6, applying the A4 "one hero surface per screen" rule).
-export default function ClientProfile({ client, onBack, onChange }: ClientProfileProps) {
-  // Bookings are matched by clientName only — scheduling.ts has no formal
-  // client foreign key yet (documented limitation, see clients.ts).
-  const bookings = DEFAULT_BOOKINGS.filter((b) => b.clientName === client.name);
+export default function ClientProfile({ client, bookings, onBack, onChange }: ClientProfileProps) {
+  const clientBookings = bookings.filter((b) => b.clientName === client.name);
+
+  const [quotes, setQuotes] = useState<Quote[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    listQuotesByClientId(client.id)
+      .then((data) => {
+        if (!cancelled) setQuotes(data);
+      })
+      .catch((err) => console.error('ClientProfile: failed to load quote history', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [client.id]);
 
   const historyItems: ActivityItem[] = [
     { id: 'created', icon: UserPlus, title: 'לקוח נוסף למערכת', timestamp: client.createdAt.toLocaleDateString('he-IL') },
-    ...bookings.map((b) => ({
+    ...clientBookings.map((b) => ({
       id: b.id,
       icon: CalendarDays,
       title: `אירוע נקבע: ${b.title}`,
@@ -96,22 +116,35 @@ export default function ClientProfile({ client, onBack, onChange }: ClientProfil
             <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-1.5">
               <FileText className="w-4 h-4 text-primary" aria-hidden="true" /> הצעות מחיר
             </h3>
-            <EmptyState
-              icon={FileText}
-              title="אין הצעות מחיר משויכות עדיין"
-              description="הצעות מחיר עדיין לא נשמרות במערכת לפי לקוח — קישור אוטומטי יתווסף לאחר שהצעות מחיר יתועדו לצמיתות (ראו CLAUDE.md)."
-            />
+            {quotes === null ? (
+              <div className="flex items-center justify-center py-8 text-muted-foreground gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                טוען...
+              </div>
+            ) : quotes.length === 0 ? (
+              <EmptyState icon={FileText} title="אין הצעות מחיר משויכות עדיין" description="הצעות מחיר שנשמרות עבור הלקוח הזה יופיעו כאן." />
+            ) : (
+              <ActivityFeed
+                items={quotes.map((q) => ({
+                  id: q.id,
+                  icon: FileText,
+                  title: `${q.quoteNumber || q.id} · ${QUOTE_STATUS_LABELS[q.status]}`,
+                  timestamp: q.createdAt ? q.createdAt.toLocaleDateString('he-IL') : '—',
+                }))}
+                emptyDescription=""
+              />
+            )}
           </section>
 
           <section>
             <h3 className="text-sm font-bold text-foreground mb-3 flex items-center gap-1.5">
               <CalendarDays className="w-4 h-4 text-primary" aria-hidden="true" /> אירועים
             </h3>
-            {bookings.length === 0 ? (
+            {clientBookings.length === 0 ? (
               <EmptyState icon={CalendarDays} title="אין אירועים משויכים" description="אירועים שנקבעו עבור הלקוח הזה יופיעו כאן." />
             ) : (
               <ActivityFeed
-                items={bookings.map((b) => ({
+                items={clientBookings.map((b) => ({
                   id: b.id,
                   icon: CalendarDays,
                   title: `${b.title} — ${b.location}`,

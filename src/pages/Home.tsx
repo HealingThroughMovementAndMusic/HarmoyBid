@@ -324,6 +324,7 @@ export default function Home() {
         <ClientsList
           autoOpenCreate={pendingQuickAction === 'create-client'}
           onAutoOpenHandled={() => setPendingQuickAction(null)}
+          bookings={bookings}
         />
       )}
 

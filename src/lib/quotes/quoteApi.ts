@@ -33,6 +33,7 @@ interface QuoteRow {
   created_at: string;
   updated_at: string;
   signed_at: string | null;
+  client_id: string | null;
   quote_line_items: QuoteLineItemRow[];
 }
 
@@ -88,6 +89,7 @@ function fromRow(row: QuoteRow): Quote {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     signedAt: row.signed_at,
+    clientId: row.client_id,
   });
 }
 
@@ -131,6 +133,7 @@ export async function saveQuote(quote: Quote): Promise<Quote> {
     notes_text: parsed.notesText,
     client_signature_data_url: parsed.clientSignatureDataUrl,
     storage_path: parsed.storagePath,
+    client_id: parsed.clientId,
     updated_at: new Date().toISOString(),
     // quote_number is intentionally omitted on insert — the DB trigger
     // assigns it. On update, Postgres leaves the existing value alone
@@ -174,4 +177,16 @@ export async function saveQuote(quote: Quote): Promise<Quote> {
 export async function deleteQuote(id: string): Promise<void> {
   const { error } = await supabase.from('quotes').delete().eq('id', id);
   if (error) throw error;
+}
+
+/** Quote history for a single client — ClientProfile.tsx's "הצעות מחיר"
+ *  section. Same QUOTE_SELECT/fromRow as listQuotes(), just filtered. */
+export async function listQuotesByClientId(clientId: string): Promise<Quote[]> {
+  const { data, error } = await supabase
+    .from('quotes')
+    .select(QUOTE_SELECT)
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data as unknown as QuoteRow[]).map(fromRow);
 }

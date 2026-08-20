@@ -26,6 +26,7 @@ function makeQuote(overrides: Partial<Quote> & { quoteType: QuoteType }): Quote 
     notesText: '',
     clientSignatureDataUrl: null,
     storagePath: null,
+    clientId: null,
     lineItems: [],
     ...overrides,
   };

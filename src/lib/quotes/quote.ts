@@ -140,6 +140,13 @@ export const QuoteSchema = z.object({
    *  `updatedAt`, it can't be silently bumped by an unrelated later edit
    *  to an already-signed quote. Null for any quote that isn't signed. */
   signedAt: z.coerce.date().nullable().optional(),
+  /** Set by findOrCreateClient() (see useQuoteForm.ts's save()) — only
+   *  for clinic_treatment/private_event quotes, only on an explicit save,
+   *  never from autosave. `on delete set null` on the DB side, so a
+   *  deleted client never takes this quote's history down with it. Null
+   *  for company_event quotes (no auto-link in this phase) and for any
+   *  quote saved with no phone/email to match or create a client from. */
+  clientId: z.string().nullable().default(null),
 });
 export type Quote = z.infer<typeof QuoteSchema>;
 

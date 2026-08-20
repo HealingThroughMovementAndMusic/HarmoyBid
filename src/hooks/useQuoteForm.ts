@@ -8,6 +8,13 @@ import {
   type QuoteType,
 } from '@/lib/quotes/quote';
 import { saveQuote } from '@/lib/quotes/quoteApi';
+import { findOrCreateClient } from '@/lib/quotes/findOrCreateClient';
+
+// Only these two quote types get an automatic clients-table link — a
+// company_event's real "customer" identity is the company (name + tax
+// id), a shape `clients` doesn't model at all yet; extending it is an
+// explicit future decision, not something to guess at here.
+const AUTO_LINK_CLIENT_TYPES: QuoteType[] = ['clinic_treatment', 'private_event'];
 
 // Autosave debounce — waits for this much inactivity before persisting a
 // draft in the background. Deliberately separate from the explicit Save
@@ -93,11 +100,26 @@ export function useQuoteForm(
     setQuote((prev) => ({ ...prev, lineItems: prev.lineItems.filter((row) => row.id !== id) }));
   }
 
+  // The ONLY call site that may trigger findOrCreateClient — an explicit
+  // save (the "שמור" button, or the save-before-export/send flows that
+  // also call this), never the autosave effect above. clinic_treatment/
+  // private_event quotes get matched-or-created against the real
+  // `clients` table by phone, then email (never by name); company_event
+  // quotes are left untouched in this phase (see AUTO_LINK_CLIENT_TYPES).
   async function save(overrides?: Partial<Quote>): Promise<Quote | null> {
     setSaving(true);
     setSaveError(null);
     try {
-      const saved = await saveQuote(overrides ? { ...quote, ...overrides } : quote);
+      let toSave = overrides ? { ...quote, ...overrides } : quote;
+      if (AUTO_LINK_CLIENT_TYPES.includes(toSave.quoteType)) {
+        const clientId = await findOrCreateClient({
+          name: toSave.clientName,
+          phone: toSave.clientPhone,
+          email: toSave.clientEmail,
+        });
+        if (clientId) toSave = { ...toSave, clientId };
+      }
+      const saved = await saveQuote(toSave);
       lastAutosavedSnapshotRef.current = JSON.stringify(saved);
       setQuote(saved);
       return saved;

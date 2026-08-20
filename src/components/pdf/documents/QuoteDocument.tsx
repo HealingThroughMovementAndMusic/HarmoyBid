@@ -1,4 +1,4 @@
-import { Document, Page, Text, StyleSheet } from '@react-pdf/renderer';
+import { Document, Page, Text, View, StyleSheet } from '@react-pdf/renderer';
 import { registerPdfFonts } from '../fonts';
 import { documentTheme } from '../documentTheme';
 import { PdfHeader } from '../components/PdfHeader';
@@ -6,7 +6,6 @@ import { PdfTitleBanner } from '../components/PdfTitleBanner';
 import { PdfPartyDetails } from '../components/PdfPartyDetails';
 import { PdfItemsTable } from '../components/PdfItemsTable';
 import { PdfTotals } from '../components/PdfTotals';
-import { PdfSigningLink } from '../components/PdfSigningLink';
 import { PdfSignatures } from '../components/PdfSignatures';
 import { PdfIncludedServices } from '../components/PdfIncludedServices';
 import { PdfActionLinks } from '../components/PdfActionLinks';
@@ -27,7 +26,12 @@ registerPdfFonts();
 
 const styles = StyleSheet.create({
   page: { fontFamily: documentTheme.fontFamily, direction: 'rtl', fontSize: 10, padding: documentTheme.spacing.page, color: documentTheme.colors.text },
-  terms: { marginTop: 18, fontSize: 8, color: documentTheme.colors.muted, lineHeight: 1.5, textAlign: 'right' },
+  // Each terms line is its own Text node (see the render below) — a single
+  // Text node joining multiple sentences via '\n' put trailing periods at
+  // the wrong visual edge (CLAUDE.md → RTL: textkit's inline bidi
+  // reordering isn't reliable across multiple logical lines sharing one
+  // Text node, only across sibling Text elements).
+  terms: { fontSize: 8, color: documentTheme.colors.muted, lineHeight: 1.3, textAlign: 'right' },
 });
 
 interface QuoteDocumentProps {
@@ -52,7 +56,6 @@ export default function QuoteDocument({ quote, signingUrl }: QuoteDocumentProps)
   const total = quoteTotalWithVat(sortedItems);
   const isCompany = quote.quoteType === 'company_event';
   const isClinic = quote.quoteType === 'clinic_treatment';
-  const alreadySigned = Boolean(quote.clientSignatureDataUrl);
 
   const partyLines = isCompany
     ? [quote.companyName, quote.companyTaxId ? `ח.פ / ע.מ: ${quote.companyTaxId}` : null, quote.contactPersonPhone, quote.contactPersonEmail]
@@ -107,11 +110,17 @@ export default function QuoteDocument({ quote, signingUrl }: QuoteDocumentProps)
             marginTop for all of them, not three separate blocks, to keep
             the vertical-space cost minimal (see the page-fit verification
             this feature was built and checked against). */}
-        {termsLines.length > 0 && <Text style={styles.terms}>{termsLines.join('\n')}</Text>}
+        {termsLines.length > 0 && (
+          <View style={{ marginTop: 18 }}>
+            {termsLines.map((line, i) => (
+              <Text key={i} style={styles.terms}>
+                {line}
+              </Text>
+            ))}
+          </View>
+        )}
 
-        {signingUrl && !alreadySigned && <PdfSigningLink signingUrl={signingUrl} />}
-
-        <PdfSignatures clientSignatureDataUrl={quote.clientSignatureDataUrl} />
+        <PdfSignatures clientSignatureDataUrl={quote.clientSignatureDataUrl} signingUrl={signingUrl} />
 
         {/* Clinic-only — a client walking in for a treatment benefits from
             a quick way to the website/booking page; event-type quotes stay

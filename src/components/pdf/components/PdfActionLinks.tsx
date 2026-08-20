@@ -1,17 +1,16 @@
 import { Text, View, Link, StyleSheet } from '@react-pdf/renderer';
 import { documentTheme } from '../documentTheme';
 
-// Clinic-quote-only footer buttons ("מידע נוסף" / "קביעת תור") — the first
-// real clickable hyperlinks in this PDF codebase (react-pdf's `Link`
-// component, not the plain-text URL pattern PdfSigningLink.tsx uses).
-// Deliberately a single slim row of small pills, not stacked bordered
-// cards like PdfSigningLink — this project's quote PDFs are tuned to fit
-// exactly one page with near-zero spare margin, so a compact footprint
-// here matters. `alignSelf: 'flex-end'` puts the row on the page's right
-// side, directly under "חתימת לקוח" (PdfSignatures.tsx's first — thus
-// rightmost, per its own row-reverse layout — signature block), per
-// explicit user placement request; PdfTotals.tsx's totalsBox uses the
-// opposite (`flex-start`, left side) for its own unrelated reason.
+// Clinic-quote-only footer buttons ("מידע נוסף" / "קביעת תור") — react-pdf's
+// `Link` component, same primitive PdfSignatures.tsx's clickable client
+// signature block uses. Deliberately a single slim row of small pills —
+// this project's quote PDFs are tuned to fit exactly one page with
+// near-zero spare margin, so a compact footprint here matters.
+// `alignSelf: 'flex-end'` puts the row on the page's right side, directly
+// under "חתימת לקוח" (PdfSignatures.tsx's first — thus rightmost, per its
+// own row-reverse layout — signature block), per explicit user placement
+// request; PdfTotals.tsx's totalsBox uses the opposite (`flex-start`, left
+// side) for its own unrelated reason.
 const styles = StyleSheet.create({
   row: { flexDirection: 'row-reverse', alignSelf: 'flex-end', marginTop: 8, gap: 6 },
   pill: {

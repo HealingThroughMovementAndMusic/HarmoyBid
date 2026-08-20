@@ -17,6 +17,7 @@ import QuoteDocument from '@/components/pdf/documents/QuoteDocument';
 import { useQuoteForm } from '@/hooks/useQuoteForm';
 import { useClientDirectory } from '@/hooks/useClientDirectory';
 import { getQuote } from '@/lib/quotes/quoteApi';
+import { VAT_EXEMPT_NOTICE } from '@/lib/quotes/quoteDocumentDefaults';
 import type { ClientDirectoryEntry } from '@/lib/quotes/clientDirectory';
 import { BUSINESS_PROFILE, getBusinessProfile } from '@/lib/business/businessProfile';
 import { getMessageTemplates, renderTemplate } from '@/lib/business/messageTemplates';
@@ -36,8 +37,6 @@ import {
   QuotePhoneSchema,
   QuoteTaxIdSchema,
   quoteGrandTotal,
-  quoteVatAmount,
-  quoteTotalWithVat,
   toWhatsAppDigits,
   eventDurationHours,
   formatHoursHe,
@@ -45,7 +44,6 @@ import {
   computeEventEndTime,
   effectiveLineItems,
   calcSeededBasePrice,
-  VAT_RATE_PCT,
   type Quote,
   type QuoteLineItem,
   type QuoteType,
@@ -647,23 +645,19 @@ function QuoteDocumentForm({
         {/* Totals — computed via effectiveLineItems(quote), not
             quote.lineItems directly, so a calc-linked event quote's total
             stays live-derived from its own eventTherapistCount/
-            eventHourlyRate/event times even with zero real stored rows. */}
+            eventHourlyRate/event times even with zero real stored rows.
+            The business is VAT-exempt — quoteGrandTotal() is already the
+            final amount, no VAT row/addition. */}
         <div className="flex justify-start">
           <div className="w-full sm:w-64 space-y-1.5 rounded-xl border border-border bg-secondary/50 p-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>סה&quot;כ לפני מע&quot;מ</span>
-              <AnimatedNumber value={quoteGrandTotal(effectiveLineItems(quote))} formatter={formatMoney} />
-            </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>מע&quot;מ ({VAT_RATE_PCT}%)</span>
-              <AnimatedNumber value={quoteVatAmount(effectiveLineItems(quote))} formatter={formatMoney} />
-            </div>
-            <div className="flex items-center justify-between text-sm font-extrabold text-foreground pt-1.5 border-t border-border/60">
+            <div className="flex items-center justify-between text-sm font-extrabold text-foreground">
               <span>סה&quot;כ לתשלום</span>
-              <AnimatedNumber value={quoteTotalWithVat(effectiveLineItems(quote))} formatter={formatMoney} />
+              <AnimatedNumber value={quoteGrandTotal(effectiveLineItems(quote))} formatter={formatMoney} />
             </div>
           </div>
         </div>
+
+        <p className="text-xs text-muted-foreground">{VAT_EXEMPT_NOTICE}</p>
 
         {treatmentError && <p className="text-xs text-destructive">{treatmentError}</p>}
         {dateError && <p className="text-xs text-destructive">{dateError}</p>}

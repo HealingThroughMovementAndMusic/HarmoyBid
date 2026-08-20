@@ -3,13 +3,14 @@ import { Calendar, dateFnsLocalizer, type View } from 'react-big-calendar';
 import { format, parse, startOfWeek, getDay } from 'date-fns';
 import { he } from 'date-fns/locale';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
-import { CalendarDays, Plus, Users2 } from 'lucide-react';
+import { CalendarDays, Plus, Trash2, Users2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
 import { coerceValidatedText } from '@/lib/utils';
-import { BookedEventSchema, BookingStatusSchema, type BookedEvent } from '@/lib/scheduling';
+import { BookedEventSchema, BookingStatusSchema, deleteBookingAndCalendarEvent, type BookedEvent } from '@/lib/scheduling';
 import { z } from 'zod';
 
 const localizer = dateFnsLocalizer({
@@ -74,6 +75,9 @@ export default function EventsCalendar({ bookings, setBookings, autoOpenCreate, 
   const [view, setView] = useState<View>('week');
   const [byTherapist, setByTherapist] = useState(false);
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
+
+  const [deletingBooking, setDeletingBooking] = useState(false);
+  const { toast } = useToast();
 
   const [createOpen, setCreateOpen] = useState(false);
   const [draftTitle, setDraftTitle] = useState('');
@@ -173,6 +177,45 @@ export default function EventsCalendar({ bookings, setBookings, autoOpenCreate, 
     setBookings((prev) => prev.map((b) => (b.id === id ? BookedEventSchema.parse({ ...b, ...updates }) : b)));
   };
 
+  // Date/start/end-time editing for the details dialog — a single shared
+  // date for both start and end (same convention the "קבע אירוע" create
+  // dialog already uses), reconstructing whichever of the three fields
+  // wasn't the one just edited from the booking's current start/end.
+  const updateBookingDateTime = (booking: BookedEvent, field: 'date' | 'startTime' | 'endTime', value: string) => {
+    const date = field === 'date' ? value : format(booking.start, 'yyyy-MM-dd');
+    const startTime = field === 'startTime' ? value : format(booking.start, 'HH:mm');
+    const endTime = field === 'endTime' ? value : format(booking.end, 'HH:mm');
+    const start = new Date(`${date}T${startTime}`);
+    const end = new Date(`${date}T${endTime}`);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+    updateBooking(booking.id, { start, end });
+  };
+
+  // Same shared teardown scheduling.ts's deleteBookingAndCalendarEvent()
+  // exposes — the one place that knows how to also remove the Google
+  // Calendar event, so this and QuotesListScreen.tsx's quote-delete flow
+  // can never drift apart. setBookings' own diffing setter (see
+  // usePersistedBookings.ts) will also call deleteBooking() again for the
+  // local-state removal below — a harmless, idempotent no-op against a
+  // row that's already gone.
+  const handleDeleteBooking = async (booking: BookedEvent) => {
+    setDeletingBooking(true);
+    try {
+      await deleteBookingAndCalendarEvent(booking);
+      setBookings((prev) => prev.filter((b) => b.id !== booking.id));
+      setSelectedBookingId(null);
+      toast({ title: 'האירוע נמחק' });
+    } catch (err) {
+      toast({
+        title: 'מחיקת האירוע נכשלה',
+        description: err instanceof Error ? err.message : undefined,
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingBooking(false);
+    }
+  };
+
   const selectedBooking = bookings.find((b) => b.id === selectedBookingId) ?? null;
 
   return (
@@ -269,6 +312,44 @@ export default function EventsCalendar({ bookings, setBookings, autoOpenCreate, 
                     className="bg-secondary border-border"
                   />
                 </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <Label htmlFor="booking-date" className="text-xs text-muted-foreground mb-1 block">
+                      תאריך
+                    </Label>
+                    <Input
+                      id="booking-date"
+                      type="date"
+                      value={format(selectedBooking.start, 'yyyy-MM-dd')}
+                      onChange={(e) => updateBookingDateTime(selectedBooking, 'date', e.target.value)}
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="booking-start-time" className="text-xs text-muted-foreground mb-1 block">
+                      שעת התחלה
+                    </Label>
+                    <Input
+                      id="booking-start-time"
+                      type="time"
+                      value={format(selectedBooking.start, 'HH:mm')}
+                      onChange={(e) => updateBookingDateTime(selectedBooking, 'startTime', e.target.value)}
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="booking-end-time" className="text-xs text-muted-foreground mb-1 block">
+                      שעת סיום
+                    </Label>
+                    <Input
+                      id="booking-end-time"
+                      type="time"
+                      value={format(selectedBooking.end, 'HH:mm')}
+                      onChange={(e) => updateBookingDateTime(selectedBooking, 'endTime', e.target.value)}
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                </div>
                 <div>
                   <Label htmlFor="booking-client" className="text-xs text-muted-foreground mb-1 block">
                     לקוח
@@ -325,6 +406,17 @@ export default function EventsCalendar({ bookings, setBookings, autoOpenCreate, 
                   </div>
                 </div>
               </div>
+              <DialogFooter>
+                <Button
+                  variant="destructive"
+                  className="gap-1.5"
+                  onClick={() => handleDeleteBooking(selectedBooking)}
+                  disabled={deletingBooking}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  מחק אירוע
+                </Button>
+              </DialogFooter>
             </>
           )}
         </DialogContent>

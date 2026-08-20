@@ -94,12 +94,14 @@ function israelLocalToUtc(dateStr: string, timeStr: string): Date {
 // that function's own comments for the full rationale.
 //
 // Fire-and-forget Calendar sync for private_event/company_event quotes —
-// same non-blocking treatment. clinic_treatment quotes have no event
-// date/time concept at all (a walk-in treatment, not a scheduled event),
-// so this never fires for them. Silently skips (logs only) when the quote
-// is missing a full date+start+end — that's the normal case for a quote
-// that was never given event scheduling info, not an error condition
-// worth surfacing to the client.
+// non-blocking. clinic_treatment quotes have no event date/time concept
+// at all (a walk-in treatment, not a scheduled event), so this never
+// fires for them. Silently skips (logs only) when the quote is missing a
+// full date+start+end — that's the normal case for a quote that was
+// never given event scheduling info, not an error condition worth
+// surfacing to the client. Returns the created event's id (or null on
+// any failure/skip) so the caller can store it on the booking row for
+// later deletion — see createBookingForSignedQuote below.
 async function syncQuoteToCalendar(quote: {
   id: string;
   quoteType: string;
@@ -109,11 +111,11 @@ async function syncQuoteToCalendar(quote: {
   eventStartTime: string | null;
   eventEndTime: string | null;
   eventTherapistCount: number | null;
-}) {
-  if (quote.quoteType !== 'private_event' && quote.quoteType !== 'company_event') return;
+}): Promise<string | null> {
+  if (quote.quoteType !== 'private_event' && quote.quoteType !== 'company_event') return null;
   if (!quote.eventDate || !quote.eventStartTime || !quote.eventEndTime) {
     console.log(`syncQuoteToCalendar: quote ${quote.id} missing full event date/time, skipping.`);
-    return;
+    return null;
   }
 
   const partyName = quote.companyName || quote.clientName || 'לקוח ללא שם';
@@ -129,12 +131,14 @@ async function syncQuoteToCalendar(quote: {
       end: `${quote.eventDate}T${quote.eventEndTime}:00`,
     });
     console.log(`syncQuoteToCalendar: created event ${result.eventId} for quote ${quote.id}`);
+    return result.eventId;
   } catch (err) {
     if (err instanceof CalendarNotConfiguredError) {
       console.error('syncQuoteToCalendar: Calendar sync not configured, skipping.', err.message);
-      return;
+      return null;
     }
     console.error('syncQuoteToCalendar: failed to create Calendar event:', err);
+    return null;
   }
 }
 
@@ -144,8 +148,11 @@ async function syncQuoteToCalendar(quote: {
 // dialog. EventsCalendar.tsx and DashboardOverview.tsx already render
 // straight off this table via Realtime (usePersistedBookings.ts), so
 // nothing on the client needs to change for a booking created here to
-// show up in both places. Independent of, and never blocks or is blocked
-// by, syncQuoteToCalendar — a failure in one must never affect the other.
+// show up in both places. Always runs, even when `googleEventId` is null
+// (Calendar sync failed or isn't configured) — a booking with no synced
+// Google event still needs to exist locally; it just can't later be
+// deleted on the Google side too (deleteBookingAndCalendarEvent skips
+// that step when googleEventId is null).
 //
 // Idempotency: uses the quote's own id as the booking's id (both are
 // uuid, no FK or format assumption ties bookings.id to a particular
@@ -163,7 +170,8 @@ async function createBookingForSignedQuote(
     eventDate: string | null;
     eventStartTime: string | null;
     eventEndTime: string | null;
-  }
+  },
+  googleEventId: string | null
 ) {
   if (quote.quoteType !== 'private_event' && quote.quoteType !== 'company_event') return;
   if (!quote.eventDate || !quote.eventStartTime || !quote.eventEndTime) {
@@ -195,13 +203,36 @@ async function createBookingForSignedQuote(
     end_time: end.toISOString(),
     status: 'confirmed',
     source: 'internal',
+    google_event_id: googleEventId,
     updated_at: new Date().toISOString(),
   });
   if (error) {
     console.error('createBookingForSignedQuote: failed to upsert booking:', error.message);
     return;
   }
-  console.log(`createBookingForSignedQuote: booking ${quote.id} upserted for quote ${quote.id}`);
+  console.log(`createBookingForSignedQuote: booking ${quote.id} upserted for quote ${quote.id} (google_event_id=${googleEventId ?? 'none'})`);
+}
+
+// Runs Calendar sync first, then always creates the booking with whatever
+// eventId resulted (or null) — a single sequential flow so the booking
+// row can store the Google event id, but Calendar failure still never
+// prevents the booking itself from being created (see the two functions'
+// own comments for why each step is structured the way it is).
+async function syncQuoteToCalendarAndBooking(
+  serviceClient: ReturnType<typeof createClient>,
+  quote: {
+    id: string;
+    quoteType: string;
+    clientName: string | null;
+    companyName: string | null;
+    eventDate: string | null;
+    eventStartTime: string | null;
+    eventEndTime: string | null;
+    eventTherapistCount: number | null;
+  }
+) {
+  const googleEventId = await syncQuoteToCalendar(quote);
+  await createBookingForSignedQuote(serviceClient, quote, googleEventId);
 }
 
 Deno.serve(async (req) => {
@@ -316,11 +347,8 @@ Deno.serve(async (req) => {
   };
 
   // Won't block this response — runs in the background after it's sent.
-  // Two independent waitUntil calls, not one combined function: a failure
-  // creating the internal booking must never affect the Google Calendar
-  // sync, or vice versa.
   EdgeRuntime.waitUntil(
-    syncQuoteToCalendar({
+    syncQuoteToCalendarAndBooking(serviceClient, {
       id: quote.id,
       quoteType: quote.quoteType,
       clientName: quote.clientName,
@@ -329,17 +357,6 @@ Deno.serve(async (req) => {
       eventStartTime: quote.eventStartTime,
       eventEndTime: quote.eventEndTime,
       eventTherapistCount: quote.eventTherapistCount,
-    })
-  );
-  EdgeRuntime.waitUntil(
-    createBookingForSignedQuote(serviceClient, {
-      id: quote.id,
-      quoteType: quote.quoteType,
-      clientName: quote.clientName,
-      companyName: quote.companyName,
-      eventDate: quote.eventDate,
-      eventStartTime: quote.eventStartTime,
-      eventEndTime: quote.eventEndTime,
     })
   );
 

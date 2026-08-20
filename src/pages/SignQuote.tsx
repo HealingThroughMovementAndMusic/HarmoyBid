@@ -7,17 +7,15 @@ import SignaturePad from '@/components/shared/SignaturePad';
 import { TurnstileWidget } from '@/components/shared/TurnstileWidget';
 import { getPublicQuote, signQuote, QuoteAlreadySignedError } from '@/lib/quotes/publicQuoteApi';
 import { BUSINESS_PROFILE, getBusinessProfile } from '@/lib/business/businessProfile';
+import { VAT_EXEMPT_NOTICE } from '@/lib/quotes/quoteDocumentDefaults';
 import { cn } from '@/lib/utils';
 import {
   QUOTE_TYPE_LABELS,
   quoteGrandTotal,
-  quoteVatAmount,
-  quoteTotalWithVat,
   lineItemTotal,
   eventHoursDisplay,
   formatDateHe,
   effectiveLineItems,
-  VAT_RATE_PCT,
   type Quote,
 } from '@/lib/quotes/quote';
 
@@ -234,23 +232,19 @@ export default function SignQuote() {
 
         {/* Totals — effectiveLineItems(quote), matching QuoteDocument.tsx's
             PDF and the internal builder, so a calc-linked event quote's
-            price is consistent everywhere the client might see it. */}
+            price is consistent everywhere the client might see it. The
+            business is VAT-exempt — quoteGrandTotal() is already the
+            final amount, no VAT row/addition. */}
         <div className="flex justify-start">
           <div className="w-full sm:w-64 space-y-1.5 rounded-xl border border-border bg-secondary/50 p-4">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>סה&quot;כ לפני מע&quot;מ</span>
-              <span>{formatMoney(quoteGrandTotal(effectiveLineItems(quote)))}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>מע&quot;מ ({VAT_RATE_PCT}%)</span>
-              <span>{formatMoney(quoteVatAmount(effectiveLineItems(quote)))}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm font-extrabold text-foreground pt-1.5 border-t border-border/60">
+            <div className="flex items-center justify-between text-sm font-extrabold text-foreground">
               <span>סה&quot;כ לתשלום</span>
-              <span>{formatMoney(quoteTotalWithVat(effectiveLineItems(quote)))}</span>
+              <span>{formatMoney(quoteGrandTotal(effectiveLineItems(quote)))}</span>
             </div>
           </div>
         </div>
+
+        <p className="text-xs text-muted-foreground">{VAT_EXEMPT_NOTICE}</p>
 
         {state === 'already-signed' ? (
           <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 text-center text-sm font-bold text-foreground">

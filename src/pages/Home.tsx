@@ -277,7 +277,7 @@ export default function Home() {
   // they only ever consumed a plain [array, setState-shaped setter] pair.
   const { packages, setPackages } = usePersistedPackages();
   const { bookings, setBookings } = usePersistedBookings();
-  const quoteStats = useQuoteStats();
+  const quoteStats = useQuoteStats(bookings);
 
   return (
     <>

@@ -27,3 +27,12 @@ export async function createGoogleCalendarEvent(input: CreateCalendarEventInput)
   if (error) throw error;
   return data as { eventId: string; htmlLink: string };
 }
+
+/** Invokes the delete-calendar-event Edge Function. Same non-blocking
+ *  treatment as create — callers (scheduling.ts's
+ *  deleteBookingAndCalendarEvent) catch failures themselves so a Google
+ *  API hiccup never blocks the local delete the user actually asked for. */
+export async function deleteGoogleCalendarEvent(eventId: string): Promise<void> {
+  const { error } = await supabase.functions.invoke('delete-calendar-event', { body: { eventId } });
+  if (error) throw error;
+}

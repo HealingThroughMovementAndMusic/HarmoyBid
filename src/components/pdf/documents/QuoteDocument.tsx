@@ -10,11 +10,9 @@ import { PdfSignatures } from '../components/PdfSignatures';
 import { PdfIncludedServices } from '../components/PdfIncludedServices';
 import { PdfActionLinks } from '../components/PdfActionLinks';
 import { getBusinessProfile } from '@/lib/business/businessProfile';
-import { getQuoteDocumentDefaults } from '@/lib/quotes/quoteDocumentDefaults';
+import { getQuoteDocumentDefaults, VAT_EXEMPT_NOTICE } from '@/lib/quotes/quoteDocumentDefaults';
 import {
   quoteGrandTotal,
-  quoteVatAmount,
-  quoteTotalWithVat,
   eventHoursDisplay,
   formatDateHe,
   effectiveLineItems,
@@ -51,9 +49,7 @@ export default function QuoteDocument({ quote, signingUrl }: QuoteDocumentProps)
   // not a stored row (see quote.ts's effectiveLineItems for why).
   const sortedItems = [...effectiveLineItems(quote)].sort((a, b) => a.order - b.order);
   const hasUnpricedRows = sortedItems.some((row) => row.unitPrice === null);
-  const subtotal = quoteGrandTotal(sortedItems);
-  const vat = quoteVatAmount(sortedItems);
-  const total = quoteTotalWithVat(sortedItems);
+  const total = quoteGrandTotal(sortedItems);
   const isCompany = quote.quoteType === 'company_event';
   const isClinic = quote.quoteType === 'clinic_treatment';
 
@@ -76,9 +72,15 @@ export default function QuoteDocument({ quote, signingUrl }: QuoteDocumentProps)
       : [];
   const isEventQuote = quote.quoteType !== 'clinic_treatment';
 
-  const termsLines = [getQuoteDocumentDefaults().paymentTerms, getQuoteDocumentDefaults().fixedNote, quote.notesText].filter(
-    (line): line is string => Boolean(line)
-  );
+  // VAT_EXEMPT_NOTICE is unconditional — always first, never filtered out
+  // even when the other lines are empty (a fixed business-status fact,
+  // not a per-quote preference like paymentTerms/fixedNote/notesText).
+  const termsLines = [
+    VAT_EXEMPT_NOTICE,
+    ...[getQuoteDocumentDefaults().paymentTerms, getQuoteDocumentDefaults().fixedNote, quote.notesText].filter(
+      (line): line is string => Boolean(line)
+    ),
+  ];
 
   return (
     <Document>
@@ -103,22 +105,22 @@ export default function QuoteDocument({ quote, signingUrl }: QuoteDocumentProps)
             no equivalent "event details" box to summarize them. */}
         {isClinic && <PdfItemsTable sortedItems={sortedItems} isClinic={isClinic} />}
 
-        <PdfTotals subtotal={subtotal} vat={vat} total={total} hasUnpricedRows={hasUnpricedRows} />
+        <PdfTotals total={total} hasUnpricedRows={hasUnpricedRows} />
 
-        {/* Business-wide defaults (payment terms + fixed note) folded into
-            the same compact slot as the per-quote notesText below — one
-            marginTop for all of them, not three separate blocks, to keep
-            the vertical-space cost minimal (see the page-fit verification
-            this feature was built and checked against). */}
-        {termsLines.length > 0 && (
-          <View style={{ marginTop: 18 }}>
-            {termsLines.map((line, i) => (
-              <Text key={i} style={styles.terms}>
-                {line}
-              </Text>
-            ))}
-          </View>
-        )}
+        {/* VAT_EXEMPT_NOTICE + business-wide defaults (payment terms +
+            fixed note) + per-quote notesText, all folded into the same
+            compact slot directly under the totals box — one marginTop for
+            all of them, not separate blocks, to keep the vertical-space
+            cost minimal (see the page-fit verification this feature was
+            built and checked against). Always renders (VAT_EXEMPT_NOTICE
+            is unconditional), so no length check needed. */}
+        <View style={{ marginTop: 18 }}>
+          {termsLines.map((line, i) => (
+            <Text key={i} style={styles.terms}>
+              {line}
+            </Text>
+          ))}
+        </View>
 
         <PdfSignatures clientSignatureDataUrl={quote.clientSignatureDataUrl} signingUrl={signingUrl} />
 

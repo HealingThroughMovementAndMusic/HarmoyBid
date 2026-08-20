@@ -30,7 +30,6 @@ const BUCKET = 'quote-pdfs';
 // Edge Functions can't import from src/, only from within supabase/functions/. Keep
 // these two in sync if either source changes.
 const BUSINESS_NOTIFICATION_EMAIL = 'healingthroughmovementandmusic@gmail.com';
-const VAT_RATE_PCT = 18;
 const QUOTE_TYPE_LABELS: Record<string, string> = {
   clinic_treatment: 'טיפול בקליניקה',
   private_event: 'אירוע פרטי',
@@ -105,11 +104,13 @@ async function notifyBusinessOfSignature(quote: {
 
   const basePrice = calcSeededBasePrice(quote);
   const effectiveLineItems = basePrice === null ? quote.lineItems : [{ unitPrice: Math.round(basePrice), quantity: 1 }, ...quote.lineItems];
-  const subtotal = effectiveLineItems.reduce(
+  // Final amount — the business is VAT-exempt, so no VAT is added on top
+  // of this sum (matches quote.ts's quoteGrandTotal(), the same live
+  // calc-linked pricing fix above is unaffected by this change).
+  const total = effectiveLineItems.reduce(
     (sum, item) => (item.unitPrice === null ? sum : sum.plus(new BigNumber(item.unitPrice).times(item.quantity))),
     new BigNumber(0)
   );
-  const total = subtotal.plus(subtotal.times(VAT_RATE_PCT).dividedBy(100));
   const partyName = quote.companyName || quote.clientName || 'לקוח ללא שם';
   const typeLabel = QUOTE_TYPE_LABELS[quote.quoteType] ?? quote.quoteType;
 

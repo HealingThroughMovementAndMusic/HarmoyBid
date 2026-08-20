@@ -34,7 +34,7 @@ function formatMoney(value: number): string {
 // distinction — it's just no longer a permanent state.
 export default function DashboardOverview({ packages, bookings, quoteStats, onNavigate, onQuickAction }: DashboardOverviewProps) {
   const upcomingBookings = bookings
-    .filter((b) => b.start.getTime() >= Date.now())
+    .filter((b) => b.start.getTime() >= Date.now() && b.status !== 'cancelled')
     .sort((a, b) => a.start.getTime() - b.start.getTime());
 
   const quickActions: FloatingDockItem[] = [

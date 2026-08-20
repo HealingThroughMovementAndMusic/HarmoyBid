@@ -89,26 +89,16 @@ export function lineItemTotal(row: QuoteLineItem): number {
   return new BigNumber(row.unitPrice).times(row.quantity).toNumber();
 }
 
-/** Subtotal of all priced rows, before VAT. */
+// The business is a VAT-exempt dealer ("עוסק פטור") — no VAT is ever
+// added to a quote. This is the final amount the client pays; there used
+// to be a VAT_RATE/VAT_RATE_PCT/quoteVatAmount/quoteTotalWithVat layer on
+// top of this that added 18%, removed per explicit business decision
+// (confirmed via full-repo search that nothing else depended on those
+// exports before removing them).
 export function quoteGrandTotal(lineItems: QuoteLineItem[]): number {
   return lineItems
     .reduce((sum, row) => sum.plus(lineItemTotal(row)), new BigNumber(0))
     .toNumber();
-}
-
-// Israeli VAT rate (18%, as of the 2025 rate change). PCT is a separate
-// display-only constant (not `VAT_RATE * 100`) so the "18%" label doesn't
-// read as unvalidated money-math arithmetic — the real calculation below
-// is the only place VAT actually gets computed, and that's BigNumber-only.
-export const VAT_RATE = 0.18;
-export const VAT_RATE_PCT = 18;
-
-export function quoteVatAmount(lineItems: QuoteLineItem[]): number {
-  return new BigNumber(quoteGrandTotal(lineItems)).times(VAT_RATE).toNumber();
-}
-
-export function quoteTotalWithVat(lineItems: QuoteLineItem[]): number {
-  return new BigNumber(quoteGrandTotal(lineItems)).plus(quoteVatAmount(lineItems)).toNumber();
 }
 
 export const QuoteSchema = z.object({

@@ -17,6 +17,16 @@ export const DEFAULT_QUOTE_DOCUMENT_TEXT: QuoteDocumentDefaults = {
   fixedNote: 'המחיר המוצג בהצעה מתייחס לשירותים המפורטים בלבד',
 };
 
+// Fixed legal/business disclosure — the business is a VAT-exempt dealer
+// ("עוסק פטור"), so every amount a client sees is already final; this
+// notice says so explicitly. Not user-editable via Settings (unlike
+// paymentTerms/fixedNote above) — a business-status fact, not a
+// per-quote preference. No trailing period, by explicit request — same
+// convention as the two lines above, the text must end exactly at
+// "לתשלום".
+export const VAT_EXEMPT_NOTICE =
+  'העסק הינו עוסק פטור ממע״מ. הסכום המפורט בהצעה הוא הסכום הסופי לתשלום';
+
 let current: QuoteDocumentDefaults = DEFAULT_QUOTE_DOCUMENT_TEXT;
 
 export function getQuoteDocumentDefaults(): QuoteDocumentDefaults {

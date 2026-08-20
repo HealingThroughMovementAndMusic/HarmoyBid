@@ -65,3 +65,30 @@ export async function createCalendarEvent(input: CreateCalendarEventInput): Prom
   const created = (await res.json()) as { id: string; htmlLink: string };
   return { eventId: created.id, htmlLink: created.htmlLink };
 }
+
+/** Deletes a single event by id. A 404 (already deleted, or never
+ *  existed) is treated as success, not an error — makes retrying a
+ *  delete always safe, and covers the case where a client/staff member
+ *  already removed the event by hand in Google Calendar. */
+export async function deleteCalendarEvent(eventId: string): Promise<void> {
+  const calendarId = Deno.env.get('GOOGLE_CALENDAR_ID');
+  if (!Deno.env.get('GOOGLE_SERVICE_ACCOUNT_KEY') || !calendarId) {
+    throw new CalendarNotConfiguredError(
+      'Google Calendar sync is not fully set up. Requires GOOGLE_SERVICE_ACCOUNT_KEY and GOOGLE_CALENDAR_ID Supabase secrets.'
+    );
+  }
+
+  const accessToken = await getGoogleAccessToken(CALENDAR_SCOPE);
+
+  const res = await fetch(
+    `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`,
+    {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+
+  if (!res.ok && res.status !== 404 && res.status !== 410) {
+    throw new Error(`Google Calendar event deletion failed (${res.status}): ${await res.text()}`);
+  }
+}

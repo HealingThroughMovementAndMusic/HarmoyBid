@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { supabase } from '@/lib/supabaseClient';
+import { deleteGoogleCalendarEvent } from '@/lib/googleCalendar';
 
 // Calendar — time & resource scheduling engine. Distinct from
 // eventCatalog.ts (the Event Library's sellable package templates): this
@@ -27,6 +28,13 @@ export const BookedEventSchema = z.object({
   end: z.coerce.date(),
   status: BookingStatusSchema.default('tentative'),
   source: BookingSourceSchema.default('internal'),
+  /** The Google Calendar event id this booking was synced to (set by
+   *  sign-quote's syncQuoteToCalendarAndBooking) — null for bookings
+   *  created before that sync ran, or created manually via "קבע אירוע"
+   *  (never itself synced to Google). Used by
+   *  deleteBookingAndCalendarEvent() below to know whether there's
+   *  anything to delete on the Google side. */
+  googleEventId: z.string().nullable().default(null),
 });
 export type BookedEvent = z.infer<typeof BookedEventSchema>;
 
@@ -84,6 +92,7 @@ interface BookingRow {
   end_time: string;
   status: string;
   source: string;
+  google_event_id: string | null;
 }
 
 function fromRow(row: BookingRow): BookedEvent {
@@ -98,6 +107,7 @@ function fromRow(row: BookingRow): BookedEvent {
     end: row.end_time,
     status: row.status,
     source: row.source,
+    googleEventId: row.google_event_id,
   });
 }
 
@@ -113,6 +123,7 @@ function toRow(booking: BookedEvent) {
     end_time: booking.end.toISOString(),
     status: booking.status,
     source: booking.source,
+    google_event_id: booking.googleEventId ?? null,
     updated_at: new Date().toISOString(),
   };
 }
@@ -123,6 +134,12 @@ export async function listBookings(): Promise<BookedEvent[]> {
   return (data as BookingRow[]).map(fromRow);
 }
 
+export async function getBooking(id: string): Promise<BookedEvent | null> {
+  const { data, error } = await supabase.from('bookings').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return data ? fromRow(data as BookingRow) : null;
+}
+
 export async function upsertBooking(booking: BookedEvent): Promise<void> {
   const { error } = await supabase.from('bookings').upsert(toRow(booking));
   if (error) throw error;
@@ -131,4 +148,31 @@ export async function upsertBooking(booking: BookedEvent): Promise<void> {
 export async function deleteBooking(id: string): Promise<void> {
   const { error } = await supabase.from('bookings').delete().eq('id', id);
   if (error) throw error;
+}
+
+// Single shared teardown path for "this booking should no longer exist,
+// anywhere" — used both when a signed quote is deleted (QuotesListScreen)
+// and when a booking is deleted directly from the internal calendar
+// (EventsCalendar.tsx). Deliberately the only place that knows how to
+// remove a booking's Google Calendar event too, so the two entry points
+// can never drift out of sync with each other.
+//
+// Best-effort on the Google side: if `googleEventId` is null (never
+// synced, or a manually-created booking) there's nothing to delete there
+// at all — skipped, not an error. If the Google API call itself fails
+// (network issue, revoked access, etc.), that failure is logged but does
+// NOT block deleting the booking locally — the user's actual request
+// ("remove this from my calendar") should still succeed even if the
+// Google side needs manual cleanup afterward. deleteCalendarEvent() on
+// the server already treats a 404/410 (already gone) as success, so a
+// retried call here is always safe.
+export async function deleteBookingAndCalendarEvent(booking: BookedEvent): Promise<void> {
+  if (booking.googleEventId) {
+    try {
+      await deleteGoogleCalendarEvent(booking.googleEventId);
+    } catch (err) {
+      console.error('deleteBookingAndCalendarEvent: failed to delete Google Calendar event, continuing with local delete:', err);
+    }
+  }
+  await deleteBooking(booking.id);
 }

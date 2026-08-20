@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, ArrowUpDown, Loader2, Plus, FileText, Search, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -10,7 +11,14 @@ import EmptyState from '@/components/shared/EmptyState';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { listQuotes, deleteQuote } from '@/lib/quotes/quoteApi';
+import { getBooking, deleteBookingAndCalendarEvent } from '@/lib/scheduling';
 import { QUOTE_STATUS_LABELS, QUOTE_TYPE_LABELS, formatDateHe, type Quote, type QuoteStatus } from '@/lib/quotes/quote';
+
+// Typed-confirmation word required before a *signed* quote can be
+// deleted — deleting one also cancels its calendar event (see
+// handleConfirmDelete below), a real-world-consequential action that
+// deserves more friction than an ordinary delete.
+const SIGNED_DELETE_CONFIRM_WORD = 'בטל';
 
 interface QuotesListScreenProps {
   onBack: () => void;
@@ -53,6 +61,7 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -96,15 +105,30 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
   };
 
   const quoteToDelete = quotes?.find((q) => q.id === pendingDeleteId) ?? null;
+  const deletingSignedQuote = quoteToDelete?.status === 'signed';
+  const signedDeleteConfirmed = !deletingSignedQuote || deleteConfirmText.trim() === SIGNED_DELETE_CONFIRM_WORD;
 
   const handleConfirmDelete = async () => {
-    if (!pendingDeleteId) return;
+    if (!pendingDeleteId || !signedDeleteConfirmed) return;
     setDeleting(true);
     setDeleteError(null);
     try {
+      // A signed quote's id is also its bookings.id (see
+      // sign-quote/index.ts's createBookingForSignedQuote) — tear that
+      // down, and its Google Calendar event with it, before removing the
+      // quote itself. Not gated on deletingSignedQuote: getBooking()
+      // simply returns null for a quote that never had one (draft/sent/
+      // rejected, or a clinic_treatment quote — those never sync a
+      // booking in the first place), so this is safe to run for every
+      // status without a special case.
+      const booking = await getBooking(pendingDeleteId);
+      if (booking) {
+        await deleteBookingAndCalendarEvent(booking);
+      }
       await deleteQuote(pendingDeleteId);
       setQuotes((prev) => (prev ? prev.filter((q) => q.id !== pendingDeleteId) : prev));
       setPendingDeleteId(null);
+      setDeleteConfirmText('');
       toast({ title: 'ההצעה נמחקה' });
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : 'מחיקת ההצעה נכשלה.');
@@ -277,6 +301,7 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
           if (!open) {
             setPendingDeleteId(null);
             setDeleteError(null);
+            setDeleteConfirmText('');
           }
         }}
       >
@@ -287,9 +312,28 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
               למחוק את &quot;{quoteToDelete?.quoteNumber} · {quoteToDelete ? partyName(quoteToDelete) : ''}&quot;? פעולה זו אינה הפיכה.
             </DialogDescription>
           </DialogHeader>
+          {deletingSignedQuote && (
+            <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3">
+              <p className="text-xs text-destructive font-semibold">
+                ההצעה הזו נחתמה. מחיקתה תבטל גם את האירוע המשויך ביומן שלנו וב-Google Calendar.
+              </p>
+              <div className="space-y-1">
+                <Label htmlFor="delete-confirm-word" className="text-xs text-muted-foreground">
+                  כדי לאשר, הקלידי &quot;{SIGNED_DELETE_CONFIRM_WORD}&quot;
+                </Label>
+                <Input
+                  id="delete-confirm-word"
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  className="bg-secondary border-border"
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          )}
           {deleteError && <p className="text-xs text-destructive">{deleteError}</p>}
           <DialogFooter className="sm:justify-start gap-2">
-            <Button variant="destructive" onClick={handleConfirmDelete} disabled={deleting}>
+            <Button variant="destructive" onClick={handleConfirmDelete} disabled={deleting || !signedDeleteConfirmed}>
               {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'מחק הצעה'}
             </Button>
             <DialogClose asChild>

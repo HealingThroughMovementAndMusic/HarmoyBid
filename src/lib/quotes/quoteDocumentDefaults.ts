@@ -13,8 +13,8 @@ export interface QuoteDocumentDefaults {
 }
 
 export const DEFAULT_QUOTE_DOCUMENT_TEXT: QuoteDocumentDefaults = {
-  paymentTerms: 'התשלום יתבצע בהתאם לתנאים שסוכמו בין הצדדים.',
-  fixedNote: 'המחיר המוצג בהצעה מתייחס לשירותים המפורטים בלבד.',
+  paymentTerms: 'התשלום יתבצע בהתאם לתנאים שסוכמו בין הצדדים',
+  fixedNote: 'המחיר המוצג בהצעה מתייחס לשירותים המפורטים בלבד',
 };
 
 let current: QuoteDocumentDefaults = DEFAULT_QUOTE_DOCUMENT_TEXT;

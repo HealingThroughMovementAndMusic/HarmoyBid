@@ -1,0 +1,12 @@
+-- The original add_packages_bookings_and_tighten_auth migration granted
+-- select/insert/update/delete on public.bookings to `authenticated` only
+-- (matching the internal app's own client-side writes at the time), never
+-- to `service_role`. That was never a problem until sign-quote's Edge
+-- Function (service-role, no user session) needed to insert a booking row
+-- on a client's signature — confirmed the actual failure via real
+-- function logs: "permission denied for table bookings". service_role
+-- already bypasses RLS but table-level GRANTs are a separate mechanism
+-- and were simply never given for this table (quotes has this grant,
+-- bookings/event_packages do not — see the same gap there, untouched here
+-- since nothing server-side writes to event_packages).
+grant select, insert, update, delete on public.bookings to service_role;

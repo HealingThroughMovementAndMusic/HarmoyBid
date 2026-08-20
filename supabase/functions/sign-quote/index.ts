@@ -51,6 +51,43 @@ const QUOTE_TYPE_LABELS: Record<string, string> = {
   company_event: 'אירוע חברה',
 };
 
+// Israel-only business — same fixed IANA zone as googleCalendar.ts, but
+// here we need an actual UTC instant (Postgres `timestamptz` has no
+// concept of "local time in a zone"), not just a zone name to hand to an
+// API. Computes the real UTC offset for Asia/Jerusalem *on the given
+// date* (via Intl, no native tz library available in Deno beyond ICU),
+// so this is correct across the DST boundary without hardcoding +2/+3 —
+// verified against both a summer (UTC+3) and winter (UTC+2) date before
+// this was wired in.
+const EVENT_TIME_ZONE = 'Asia/Jerusalem';
+
+function timeZoneOffsetMinutes(timeZone: string, atUtc: Date): number {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })
+    .formatToParts(atUtc)
+    .reduce((acc, p) => ({ ...acc, [p.type]: p.value }), {} as Record<string, string>);
+  const asUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  return (asUtc - atUtc.getTime()) / 60000;
+}
+
+/** 'YYYY-MM-DD' + 'HH:MM' local Asia/Jerusalem wall-clock time -> the
+ *  correct UTC Date instant. */
+function israelLocalToUtc(dateStr: string, timeStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const [hh, mm] = timeStr.split(':').map(Number);
+  const naiveUtc = Date.UTC(y, m - 1, d, hh, mm, 0);
+  const offsetMinutes = timeZoneOffsetMinutes(EVENT_TIME_ZONE, new Date(naiveUtc));
+  return new Date(naiveUtc - offsetMinutes * 60000);
+}
+
 // The "quote signed" business-notification email used to live here, but
 // moved to archive-quote-pdf: this function runs before the PDF is
 // archived to Storage, so it had no way to link to the archived file. See
@@ -99,6 +136,72 @@ async function syncQuoteToCalendar(quote: {
     }
     console.error('syncQuoteToCalendar: failed to create Calendar event:', err);
   }
+}
+
+// Creates the internal-calendar counterpart of the Calendar sync above —
+// a row in `bookings`, the same table src/lib/scheduling.ts's
+// upsertBooking() writes to from the internal app's own "קבע אירוע"
+// dialog. EventsCalendar.tsx and DashboardOverview.tsx already render
+// straight off this table via Realtime (usePersistedBookings.ts), so
+// nothing on the client needs to change for a booking created here to
+// show up in both places. Independent of, and never blocks or is blocked
+// by, syncQuoteToCalendar — a failure in one must never affect the other.
+//
+// Idempotency: uses the quote's own id as the booking's id (both are
+// uuid, no FK or format assumption ties bookings.id to a particular
+// generator — confirmed by reading scheduling.ts, EventsCalendar.tsx, and
+// the bookings table's migration before relying on this) and upserts, so
+// a retried/duplicate call updates the same row instead of creating a
+// second one.
+async function createBookingForSignedQuote(
+  serviceClient: ReturnType<typeof createClient>,
+  quote: {
+    id: string;
+    quoteType: string;
+    clientName: string | null;
+    companyName: string | null;
+    eventDate: string | null;
+    eventStartTime: string | null;
+    eventEndTime: string | null;
+  }
+) {
+  if (quote.quoteType !== 'private_event' && quote.quoteType !== 'company_event') return;
+  if (!quote.eventDate || !quote.eventStartTime || !quote.eventEndTime) {
+    console.log(`createBookingForSignedQuote: quote ${quote.id} missing full event date/time, skipping.`);
+    return;
+  }
+
+  const start = israelLocalToUtc(quote.eventDate, quote.eventStartTime);
+  const end = israelLocalToUtc(quote.eventDate, quote.eventEndTime);
+  if (end.getTime() <= start.getTime()) {
+    // Same known limitation as quote.ts's eventDurationHours() — an event
+    // whose end time is not after its start time on the same calendar day
+    // (e.g. one crossing midnight) isn't modeled anywhere in this app yet.
+    // Skip rather than guess at a next-day rollover.
+    console.log(`createBookingForSignedQuote: quote ${quote.id} has end time not after start time, skipping.`);
+    return;
+  }
+
+  const partyName = quote.companyName || quote.clientName || 'לקוח ללא שם';
+  const typeLabel = QUOTE_TYPE_LABELS[quote.quoteType] ?? quote.quoteType;
+
+  const { error } = await serviceClient.from('bookings').upsert({
+    id: quote.id,
+    title: `${typeLabel} — ${partyName}`,
+    client_name: partyName,
+    location: '',
+    therapist_names: [],
+    start_time: start.toISOString(),
+    end_time: end.toISOString(),
+    status: 'confirmed',
+    source: 'internal',
+    updated_at: new Date().toISOString(),
+  });
+  if (error) {
+    console.error('createBookingForSignedQuote: failed to upsert booking:', error.message);
+    return;
+  }
+  console.log(`createBookingForSignedQuote: booking ${quote.id} upserted for quote ${quote.id}`);
 }
 
 Deno.serve(async (req) => {
@@ -213,6 +316,9 @@ Deno.serve(async (req) => {
   };
 
   // Won't block this response — runs in the background after it's sent.
+  // Two independent waitUntil calls, not one combined function: a failure
+  // creating the internal booking must never affect the Google Calendar
+  // sync, or vice versa.
   EdgeRuntime.waitUntil(
     syncQuoteToCalendar({
       id: quote.id,
@@ -223,6 +329,17 @@ Deno.serve(async (req) => {
       eventStartTime: quote.eventStartTime,
       eventEndTime: quote.eventEndTime,
       eventTherapistCount: quote.eventTherapistCount,
+    })
+  );
+  EdgeRuntime.waitUntil(
+    createBookingForSignedQuote(serviceClient, {
+      id: quote.id,
+      quoteType: quote.quoteType,
+      clientName: quote.clientName,
+      companyName: quote.companyName,
+      eventDate: quote.eventDate,
+      eventStartTime: quote.eventStartTime,
+      eventEndTime: quote.eventEndTime,
     })
   );
 

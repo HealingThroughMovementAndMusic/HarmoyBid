@@ -6,7 +6,6 @@ import { GlassPanel, SolidCard } from '@/components/shared/GlassPanel';
 import SignaturePad from '@/components/shared/SignaturePad';
 import { TurnstileWidget } from '@/components/shared/TurnstileWidget';
 import { getPublicQuote, signQuote, QuoteAlreadySignedError } from '@/lib/quotes/publicQuoteApi';
-import { archiveQuotePdf } from '@/lib/storage/archiveQuotePdf';
 import { BUSINESS_PROFILE, getBusinessProfile } from '@/lib/business/businessProfile';
 import { cn } from '@/lib/utils';
 import {
@@ -83,8 +82,15 @@ export default function SignQuote() {
     try {
       const signed = await signQuote(quoteId, signature, turnstileToken ?? undefined);
       setQuote(signed);
-      archiveQuotePdf(signed, { notify: true });
       setState('signed');
+      // Dynamic import — @react-pdf/renderer + QuoteDocument (and every
+      // Pdf* component) are only needed once a client has actually signed,
+      // never to render this page in the first place. Loading them here
+      // instead of as a top-level import keeps them out of the chunk this
+      // page needs before the user can even see the "sign" button.
+      import('@/lib/storage/archiveQuotePdf').then(({ archiveQuotePdf }) => {
+        archiveQuotePdf(signed, { notify: true });
+      });
     } catch (err) {
       if (err instanceof QuoteAlreadySignedError) {
         setState('already-signed');

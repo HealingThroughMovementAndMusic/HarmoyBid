@@ -14,8 +14,7 @@
 //
 // Business-signing notification email: moved here from sign-quote (see
 // that function's own comments for why) — this is the first point in the
-// flow where the PDF is actually in Storage, so it's the only place that
-// can include a real signed link to it. Gated behind `notify: true`,
+// flow where the PDF is actually in Storage. Gated behind `notify: true`,
 // which only src/pages/SignQuote.tsx's public-signing call sets —
 // QuoteDocumentScreen.tsx's internal re-save archival never sets it, so
 // staff re-saving an already-signed quote never re-sends the "quote
@@ -26,9 +25,6 @@ import BigNumber from 'npm:bignumber.js@9';
 import { handleCorsPreflight, corsHeaders } from '../_shared/cors.ts';
 
 const BUCKET = 'quote-pdfs';
-// Long enough that a business owner who doesn't open the email same-day
-// still has a working link; short enough not to be a de-facto public URL.
-const SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 // Duplicated from src/lib/business/businessProfile.ts and src/lib/quotes/quote.ts —
 // Edge Functions can't import from src/, only from within supabase/functions/. Keep
@@ -52,26 +48,64 @@ interface ArchiveQuoteBody {
   notify?: boolean;
 }
 
+// Duplicated from src/lib/quotes/quote.ts's eventDurationHours/
+// calcSeededBasePrice — Edge Functions can't import from src/ (see the
+// other duplicated constants above). A calc-linked event quote (seeded
+// from the Events Calculator) never stores a priced line item at all; its
+// real price is therapists × hours × hourlyRate, computed live. Without
+// this, the notification email summed only quote_line_items (empty for
+// these quotes) and always showed ₪0 regardless of the real total. Keep
+// in sync with quote.ts if either changes.
+function calcSeededBasePrice(quote: {
+  eventExpectedHours: number | null;
+  eventTherapistCount: number | null;
+  eventHourlyRate: number | null;
+  eventStartTime: string | null;
+  eventEndTime: string | null;
+}): number | null {
+  if (quote.eventExpectedHours === null) return null;
+  if (!quote.eventTherapistCount || !quote.eventHourlyRate) return null;
+
+  let hours = quote.eventExpectedHours;
+  if (quote.eventStartTime && quote.eventEndTime) {
+    const [startH, startM] = quote.eventStartTime.split(':').map(Number);
+    const [endH, endM] = quote.eventEndTime.split(':').map(Number);
+    if (![startH, startM, endH, endM].some((n) => Number.isNaN(n))) {
+      const diffMinutes = endH * 60 + endM - (startH * 60 + startM);
+      if (diffMinutes > 0) hours = diffMinutes / 60;
+    }
+  }
+  return new BigNumber(quote.eventTherapistCount).times(hours).times(quote.eventHourlyRate).toNumber();
+}
+
 // Fire-and-forget notification to the business that a client just signed —
 // must never block or fail the archive response. Uses EdgeRuntime.waitUntil
 // (the documented Supabase pattern for background work in an Edge Function).
-async function notifyBusinessOfSignature(
-  quote: {
-    quoteNumber: string | null;
-    quoteType: string;
-    clientName: string | null;
-    companyName: string | null;
-    lineItems: { unitPrice: number | null; quantity: number }[];
-  },
-  pdfLink: string | null
-) {
+// No PDF link in the body, by explicit request — this is an internal
+// notification to the business owner, who already has app access; a long
+// raw signed-URL string added nothing over just pointing them at "הצעות
+// שמורות" in the app.
+async function notifyBusinessOfSignature(quote: {
+  quoteNumber: string | null;
+  quoteType: string;
+  clientName: string | null;
+  companyName: string | null;
+  lineItems: { unitPrice: number | null; quantity: number }[];
+  eventExpectedHours: number | null;
+  eventTherapistCount: number | null;
+  eventHourlyRate: number | null;
+  eventStartTime: string | null;
+  eventEndTime: string | null;
+}) {
   const resendApiKey = Deno.env.get('RESEND_API_KEY');
   if (!resendApiKey) {
     console.error('notifyBusinessOfSignature: RESEND_API_KEY not set, skipping.');
     return;
   }
 
-  const subtotal = quote.lineItems.reduce(
+  const basePrice = calcSeededBasePrice(quote);
+  const effectiveLineItems = basePrice === null ? quote.lineItems : [{ unitPrice: Math.round(basePrice), quantity: 1 }, ...quote.lineItems];
+  const subtotal = effectiveLineItems.reduce(
     (sum, item) => (item.unitPrice === null ? sum : sum.plus(new BigNumber(item.unitPrice).times(item.quantity))),
     new BigNumber(0)
   );
@@ -94,9 +128,7 @@ async function notifyBusinessOfSignature(
           <p>הצעת מחיר <strong>${quote.quoteNumber ?? ''}</strong> נחתמה על ידי ${partyName}.</p>
           <p>סוג הצעה: ${typeLabel}</p>
           <p>סה"כ לתשלום: ${formatMoney(total)}</p>
-          <p>פתח את "הצעות שמורות" באפליקציה${
-            pdfLink ? `, או פתח את ההצעה החתומה ישירות בלינק הבא: <a href="${pdfLink}">${pdfLink}</a>` : ''
-          }.</p>
+          <p>לצפייה בהצעה החתומה, פתח את "הצעות שמורות" באפליקציה.</p>
         </div>`,
       }),
     });
@@ -162,29 +194,32 @@ Deno.serve(async (req) => {
   }
 
   if (body.notify) {
-    const { data: signedUrlData } = await serviceClient.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_TTL_SECONDS);
-
     const { data: row } = await serviceClient
       .from('quotes')
-      .select('quote_number, quote_type, client_name, company_name, quote_line_items(unit_price, quantity)')
+      .select(
+        'quote_number, quote_type, client_name, company_name, quote_line_items(unit_price, quantity), ' +
+          'event_expected_hours, event_therapist_count, event_hourly_rate, event_start_time, event_end_time'
+      )
       .eq('id', body.quoteId)
       .maybeSingle();
 
     if (row) {
       EdgeRuntime.waitUntil(
-        notifyBusinessOfSignature(
-          {
-            quoteNumber: row.quote_number,
-            quoteType: row.quote_type,
-            clientName: row.client_name,
-            companyName: row.company_name,
-            lineItems: (row.quote_line_items ?? []).map((item: { unit_price: number | null; quantity: number }) => ({
-              unitPrice: item.unit_price,
-              quantity: item.quantity,
-            })),
-          },
-          signedUrlData?.signedUrl ?? null
-        )
+        notifyBusinessOfSignature({
+          quoteNumber: row.quote_number,
+          quoteType: row.quote_type,
+          clientName: row.client_name,
+          companyName: row.company_name,
+          lineItems: (row.quote_line_items ?? []).map((item: { unit_price: number | null; quantity: number }) => ({
+            unitPrice: item.unit_price,
+            quantity: item.quantity,
+          })),
+          eventExpectedHours: row.event_expected_hours,
+          eventTherapistCount: row.event_therapist_count,
+          eventHourlyRate: row.event_hourly_rate,
+          eventStartTime: row.event_start_time,
+          eventEndTime: row.event_end_time,
+        })
       );
     }
   }

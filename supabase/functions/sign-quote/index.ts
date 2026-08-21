@@ -211,6 +211,7 @@ async function createBookingForSignedQuote(
     eventDate: string | null;
     eventStartTime: string | null;
     eventEndTime: string | null;
+    eventLocation: string | null;
   },
   googleEventId: string | null
 ) {
@@ -232,13 +233,20 @@ async function createBookingForSignedQuote(
   }
 
   const partyName = quote.companyName || quote.clientName || 'לקוח ללא שם';
+  // ClientProfile.tsx matches bookings to a client by exact name equality
+  // against the (already-trimmed, via findOrCreateClient) clients.name —
+  // a booking's own client_name must be trimmed the same way, or a
+  // trailing-space quote field silently breaks that match. See CLAUDE.md
+  // for the investigation that found this (a real "אלי יונטל " vs "אלי
+  // יונטל" mismatch).
+  const normalizedPartyName = partyName.trim();
   const typeLabel = QUOTE_TYPE_LABELS[quote.quoteType] ?? quote.quoteType;
 
   const { error } = await serviceClient.from('bookings').upsert({
     id: quote.id,
-    title: `${typeLabel} — ${partyName}`,
-    client_name: partyName,
-    location: '',
+    title: `${typeLabel} — ${normalizedPartyName}`,
+    client_name: normalizedPartyName,
+    location: quote.eventLocation ?? '',
     therapist_names: [],
     start_time: start.toISOString(),
     end_time: end.toISOString(),
@@ -270,6 +278,7 @@ async function syncQuoteToCalendarAndBooking(
     eventStartTime: string | null;
     eventEndTime: string | null;
     eventTherapistCount: number | null;
+    eventLocation: string | null;
   }
 ) {
   const googleEventId = await syncQuoteToCalendar(serviceClient, quote);
@@ -381,6 +390,7 @@ Deno.serve(async (req) => {
     eventParticipantsCount: row.event_participants_count,
     eventHourlyRate: row.event_hourly_rate,
     eventExpectedHours: row.event_expected_hours,
+    eventLocation: row.event_location,
     notesText: row.notes_text,
     clientSignatureDataUrl: row.client_signature_data_url,
     storagePath: row.storage_path,
@@ -414,6 +424,7 @@ Deno.serve(async (req) => {
       eventStartTime: quote.eventStartTime,
       eventEndTime: quote.eventEndTime,
       eventTherapistCount: quote.eventTherapistCount,
+      eventLocation: quote.eventLocation,
     })
   );
 

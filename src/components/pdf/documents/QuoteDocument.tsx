@@ -68,6 +68,7 @@ export default function QuoteDocument({ quote, signingUrl }: QuoteDocumentProps)
           quote.eventTherapistCount ? { label: 'כמות מטפלים', value: String(quote.eventTherapistCount) } : null,
           quote.eventParticipantsCount ? { label: 'כמות משתתפים כוללת', value: String(quote.eventParticipantsCount) } : null,
           quote.eventHourlyRate ? { label: 'תעריף שעתי', value: String(quote.eventHourlyRate) } : null,
+          quote.eventLocation ? { label: 'מיקום', value: quote.eventLocation } : null,
         ]
       : [];
   const isEventQuote = quote.quoteType !== 'clinic_treatment';

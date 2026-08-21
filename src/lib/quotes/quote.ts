@@ -65,6 +65,12 @@ export const QuoteEventHourlyRateSchema = z.number().nonnegative().max(1_000_000
 // as a standalone field; never set for quotes not seeded from the
 // calculator.
 export const QuoteEventExpectedHoursSchema = z.number().positive().max(1000);
+// Free text — where the event/treatment actually takes place. Not part of
+// the calc-linked pricing formula (calcSeededBasePrice), purely
+// informational; flows through to the created Booking's location and the
+// client-facing PDF/sign page. See CLAUDE.md → "Domain model" for the
+// Booking wiring.
+export const QuoteEventLocationSchema = z.string().max(200);
 export const QuoteNotesTextSchema = z.string().max(2000);
 
 export const QuoteLineItemSchema = z.object({
@@ -123,6 +129,7 @@ export const QuoteSchema = z.object({
   eventParticipantsCount: QuoteEventParticipantsCountSchema.nullable().default(null),
   eventHourlyRate: QuoteEventHourlyRateSchema.nullable().default(null),
   eventExpectedHours: QuoteEventExpectedHoursSchema.nullable().default(null),
+  eventLocation: QuoteEventLocationSchema.default(''),
 
   notesText: QuoteNotesTextSchema.default(''),
   clientSignatureDataUrl: z.string().nullable().default(null),

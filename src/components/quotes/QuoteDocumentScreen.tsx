@@ -33,6 +33,7 @@ import {
   QuoteEventTherapistCountSchema,
   QuoteEventParticipantsCountSchema,
   QuoteEventHourlyRateSchema,
+  QuoteEventLocationSchema,
   QuoteNotesTextSchema,
   QuotePhoneSchema,
   QuoteTaxIdSchema,
@@ -567,6 +568,13 @@ function QuoteDocumentForm({
                         : coerceValidatedNumber(QuoteEventHourlyRateSchema, e.target.value, quote.eventHourlyRate ?? 0)
                     )
                   }
+                  className="bg-secondary border-border"
+                />
+              </Field>
+              <Field label="מיקום">
+                <Input
+                  value={quote.eventLocation}
+                  onChange={(e) => updateField('eventLocation', coerceValidatedText(QuoteEventLocationSchema, e.target.value, quote.eventLocation))}
                   className="bg-secondary border-border"
                 />
               </Field>

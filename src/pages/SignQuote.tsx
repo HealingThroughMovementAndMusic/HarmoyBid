@@ -188,6 +188,7 @@ export default function SignQuote() {
               <ReadOnlyField label="תאריך האירוע" value={quote.eventDate ? formatDateHe(quote.eventDate) : ''} />
               <ReadOnlyField label="שעות פעילות" value={eventHoursDisplay(quote)} />
               <ReadOnlyField label="כמות מטפלים" value={quote.eventTherapistCount?.toString() ?? ''} />
+              <ReadOnlyField label="מיקום" value={quote.eventLocation} />
             </>
           )}
         </div>

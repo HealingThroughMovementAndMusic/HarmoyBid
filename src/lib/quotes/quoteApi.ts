@@ -27,6 +27,7 @@ interface QuoteRow {
   event_participants_count: number | null;
   event_hourly_rate: number | null;
   event_expected_hours: number | null;
+  event_location: string;
   notes_text: string;
   client_signature_data_url: string | null;
   storage_path: string | null;
@@ -82,6 +83,7 @@ function fromRow(row: QuoteRow): Quote {
     eventParticipantsCount: row.event_participants_count,
     eventHourlyRate: row.event_hourly_rate,
     eventExpectedHours: row.event_expected_hours,
+    eventLocation: row.event_location,
     notesText: row.notes_text,
     clientSignatureDataUrl: row.client_signature_data_url,
     storagePath: row.storage_path,
@@ -130,6 +132,7 @@ export async function saveQuote(quote: Quote): Promise<Quote> {
     event_participants_count: parsed.eventParticipantsCount,
     event_hourly_rate: parsed.eventHourlyRate,
     event_expected_hours: parsed.eventExpectedHours,
+    event_location: parsed.eventLocation,
     notes_text: parsed.notesText,
     client_signature_data_url: parsed.clientSignatureDataUrl,
     storage_path: parsed.storagePath,

@@ -87,6 +87,7 @@ Deno.serve(async (req) => {
     eventParticipantsCount: row.event_participants_count,
     eventHourlyRate: row.event_hourly_rate,
     eventExpectedHours: row.event_expected_hours,
+    eventLocation: row.event_location,
     notesText: row.notes_text,
     clientSignatureDataUrl: row.client_signature_data_url,
     storagePath: row.storage_path,

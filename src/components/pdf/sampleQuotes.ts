@@ -23,6 +23,7 @@ function makeQuote(overrides: Partial<Quote> & { quoteType: QuoteType }): Quote 
     eventParticipantsCount: null,
     eventHourlyRate: null,
     eventExpectedHours: null,
+    eventLocation: '',
     notesText: '',
     clientSignatureDataUrl: null,
     storagePath: null,

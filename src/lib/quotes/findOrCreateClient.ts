@@ -3,10 +3,9 @@ import { ClientSchema, upsertClient } from '@/lib/clients';
 
 // Called only from useQuoteForm.ts's explicit save() — never from the
 // autosave effect — for clinic_treatment/private_event quotes. Matches
-// against the real `clients` table (not clientDirectory.ts's quotes-
-// history-derived list, which stays a separate, unchanged autocomplete
-// source), so a client created this way actually lands in the same
-// table ClientsList.tsx/ClientProfile.tsx already read from.
+// against the real `clients` table, so a client created this way lands
+// in the same table ClientsList.tsx/ClientProfile.tsx read from, and the
+// same one clientDirectory.ts's autocomplete now suggests from too.
 //
 // No unique DB constraint on phone/email backs this — per explicit
 // product decision, neither field is an absolute business identifier

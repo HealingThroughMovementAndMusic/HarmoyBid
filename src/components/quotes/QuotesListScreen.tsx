@@ -294,7 +294,7 @@ export default function QuotesListScreen({ onBack, onOpen, onNew }: QuotesListSc
                         setPendingDeleteId(quote.id);
                       }}
                       aria-label={`מחק הצעה ${quote.quoteNumber}`}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1.5"
                     >
                       <Trash2 className="h-4 w-4" />
                     </button>

@@ -49,17 +49,17 @@ export function FloatingDock({ items, desktopClassName, mobileClassName }: Float
 function FloatingDockMobile({ items, className }: { items: FloatingDockItem[]; className?: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className={cn('relative block md:hidden', className)}>
+    <div className={cn('relative inline-block md:hidden', className)}>
       <AnimatePresence>
         {open && (
-          <motion.div layoutId="harmony-dock-nav" className="absolute inset-x-0 bottom-full mb-2 flex flex-col gap-2">
+          <motion.div layoutId="harmony-dock-nav" className="absolute inset-y-0 right-full mr-2 flex flex-row items-center gap-2">
             {items.map((item, idx) => (
               <motion.div
                 key={item.title}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 10, transition: { ...VOLTAGE_TRANSITION, delay: idx * 0.05 } }}
-                transition={{ ...VOLTAGE_TRANSITION, delay: (items.length - 1 - idx) * 0.05 }}
+                initial={{ opacity: 0, x: 10 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 10, transition: { ...VOLTAGE_TRANSITION, delay: (items.length - 1 - idx) * 0.05 } }}
+                transition={{ ...VOLTAGE_TRANSITION, delay: idx * 0.05 }}
               >
                 <button
                   onClick={() => {

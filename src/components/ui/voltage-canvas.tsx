@@ -23,7 +23,6 @@ export function VoltageCanvas({ className }: { className?: string }) {
           inset: 0,
           backgroundColor: "#181818",
           backgroundImage: "linear-gradient(275deg, rgb(41, 41, 36) 0%, rgb(15, 15, 15) 100%)",
-          backgroundAttachment: "fixed",
         }}
       />
     </div>
